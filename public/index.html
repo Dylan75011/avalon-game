@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>阿瓦隆 - 多人在线推理游戏</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1><i class="gi gi-sword"></i> 阿瓦隆 <i class="gi gi-sword"></i></h1>
+    
+    <!-- 登录 -->
+    <div id="loginScreen" class="screen">
+      <div class="card">
+        <h2><i class="gi gi-pick"></i> 冒险者登录</h2>
+        <input type="tel" id="phone" placeholder="手机号" maxlength="11">
+        <input type="text" id="username" placeholder="昵称（可选）">
+        <button onclick="register()">进入游戏</button>
+        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
+        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
+      </div>
+        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
+      </div>
+      <div class="link-buttons">
+          <a href="#" onclick="showRanking(); return false;"><i class="gi gi-trophy"></i> 排行榜</a>
+          <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 游戏规则</a>
+          <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 大厅 -->
+    <div id="lobbyScreen" class="screen hidden">
+      <div class="card">
+        <h2>🏠 游戏大厅</h2>
+        <p>欢迎，<span id="welcomeUser"></span></p>
+        <button onclick="showCreateRoomModal()"><i class="gi gi-castle"></i> 创建房间</button>
+        <div class="join-room">
+          <h3>或加入房间</h3>
+          <input type="text" id="joinCode" placeholder="邀请码" maxlength="6">
+          <button onclick="joinRoom()">加入</button>
+        </div>
+        <div class="my-stats">
+          <h3>📊 我的战绩</h3>
+          <p>总积分: <span id="totalPoints">0</span></p>
+          <p>游戏局数: <span id="gamesPlayed">0</span></p>
+          <p>获胜次数: <span id="gamesWon">0</span></p>
+        </div>
+        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
+        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
+      </div>
+        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
+      </div>
+      <div class="link-buttons">
+          <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 游戏规则</a>
+          <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 房间 -->
+    <div id="createRoomModal" class="modal hidden">
+      <div class="modal-content">
+        <span class="close" onclick="closeCreateRoomModal()">×</span>
+        <h2><svg class="svg-icon"><use href="#icon-castle"></use></svg> 创建房间</h2>
+        <p>选择游戏人数：</p>
+        <div class="count-buttons" style="margin:20px 0;">
+          <button type="button" class="count-btn" onclick="selectPlayerCount(5)">5人</button>
+          <button type="button" class="count-btn" onclick="selectPlayerCount(6)">6人</button>
+          <button type="button" class="count-btn" onclick="selectPlayerCount(7)">7人</button>
+          <button type="button" class="count-btn" onclick="selectPlayerCount(8)">8人</button>
+          <button type="button" class="count-btn" onclick="selectPlayerCount(9)">9人</button>
+          <button type="button" class="count-btn" onclick="selectPlayerCount(10)">10人</button>
+        </div>
+        <button onclick="confirmCreateRoom()">确认创建</button>
+        <button class="secondary" onclick="closeCreateRoomModal()">取消</button>
+      </div>
+    </div>
+
+    <div id="roomScreen" class="screen hidden">
+      <div class="card">
+        <h2><i class="gi gi-castle"></i> 房间 <span id="roomCode"></span></h2>
+        
+        </div>
+        
+        <div id="waitingHint" class="waiting-hint">选择人数后开始</div>
+        
+        <div class="players-list">
+          <h3>👥 玩家 (<span id="playerCount">0</span>/<span id="maxPlayers">5</span>)</h3>
+          <ul id="players"></ul>
+        </div>
+
+        <div class="actions">
+          <button id="startBtn" onclick="startGame()"><i class="gi gi-sword"></i> 开始战役</button>
+          <button class="secondary" onclick="leaveRoom()">离开房间</button>
+        </div>
+
+        <div class="invite-code"><span id="inviteCode"></span></div>
+        <button class="small" onclick="copyInviteCode()">复制邀请码</button>
+      </div>
+    </div>
+
+    <!-- 游戏 -->
+    <div id="gameScreen" class="screen hidden">
+      <div class="card">
+        <h2><i class="gi gi-sword"></i> 战役进行中</h2>
+        <div class="game-progress" id="gameProgress"></div>
+        <div class="turn-indicator" id="turnIndicator" style="display:none"><span class="phase-name"></span><span class="phase-desc"></span></div>
+        <div class="game-info">
+          <span id="currentRound"></span>
+          <div class="role-info">你的角色: <span id="myRole"></span></div>
+        </div>
+        <div class="players-grid" id="playersGrid"></div>
+
+        <div id="leaderActions" class="actions hidden">
+          <h3><i class="gi gi-sword"></i> 组队</h3>
+          <p>选择任务成员：</p>
+          <button onclick="submitTeamWithFeedback()">提交队伍</button>
+        </div>
+
+        <div id="voteActions" class="actions hidden">
+          <h3><i class="gi gi-ballot"></i> 投票</h3>
+          <p>是否同意该队伍？</p>
+          <div class="vote-buttons">
+            <button class="approve" onclick="vote('approve')">✓ 同意</button>
+            <button class="reject" onclick="vote('reject')">✗ 反对</button>
+          </div>
+        </div>
+
+        <div id="missionActions" class="actions hidden">
+          <h3><i class="gi gi-sword"></i> 任务</h3>
+          <p>选择任务结果：</p>
+          <div class="vote-buttons">
+            <button class="approve" onclick="submitMission('success')">✓ 成功</button>
+            <button class="reject" onclick="submitMission('fail')">✗ 失败</button>
+          </div>
+        </div>
+
+        <div id="resultDisplay" class="result hidden">
+          <h3 id="resultTitle"></h3>
+          <p id="resultMessage"></p>
+        </div>
+        
+        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
+        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
+      </div>
+        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
+      </div>
+      <div class="link-buttons">
+          <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 查看规则</a>
+          <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 排行榜 -->
+    <div id="rankingModal" class="modal hidden">
+      <div class="modal-content">
+        <span class="close" onclick="closeRanking()">×</span>
+        <h2><i class="gi gi-trophy"></i> 排行榜</h2>
+        <table>
+          <thead><tr><th>排名</th><th>玩家</th><th>积分</th><th>胜率</th></tr></thead>
+          <tbody id="rankingBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 规则 -->
+    <div id="rulesModal" class="modal hidden">
+      <div class="modal-content">
+        <span class="close" onclick="closeRules()">×</span>
+        <h2><i class="gi gi-scroll"></i> 游戏规则</h2>
+        
+        <div class="rules-section">
+        <div class="rules-section">
+          <h3>⚔️ 任务配置</h3>
+          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
+          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
+          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+        </div>
+          <h3>🎯 游戏目标</h3>
+          <p><strong>好人：</strong>完成3轮任务，阻止刺杀梅林</p>
+          <p><strong>坏人：</strong>3轮失败，或刺杀梅林</p>
+        </div>
+        
+        <div class="rules-section">
+        <div class="rules-section">
+          <h3>⚔️ 任务配置</h3>
+          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
+          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
+          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+        </div>
+          <h3><i class="gi gi-shield"></i><i class="gi gi-sword"></i> 角色</h3>
+          <p><strong><i class="gi gi-wizard"></i> 梅林</strong> - 知道所有坏人（除莫德雷德）</p>
+          <p><strong><i class="gi gi-shield"></i> 派西维尔</strong> - 知道梅林是谁</p>
+          <p><strong>👼 忠臣</strong> - 无特殊技能</p>
+          <p><strong><i class="gi gi-dagger"></i> 刺客</strong> - 可刺杀梅林</p>
+          <p><strong>👿 爪牙</strong> - 知道梅林和其他坏人</p>
+          <p><strong>👺 奥伯伦</strong> - 坏人但互相不知</p>
+        </div>
+        
+        <div class="rules-section">
+        <div class="rules-section">
+          <h3>⚔️ 任务配置</h3>
+          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
+          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
+          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+        </div>
+          <h3><i class="gi gi-sword"></i> 流程</h3>
+          <ol>
+            <li>队长组队（3-5人）</li>
+            <li>全员投票</li>
+            <li>任务执行</li>
+            <li>3次成功=好人胜</li>
+            <li>3次失败=坏人胜</li>
+            <li>5轮后刺客刺杀</li>
+          </ol>
+        </div>
+        
+        <div class="rules-section">
+        <div class="rules-section">
+          <h3>⚔️ 任务配置</h3>
+          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
+          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
+          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+        </div>
+          <h3>📊 人数配置</h3>
+          <p><strong>5人：</strong>梅林、派西、忠臣×2、刺客</p>
+          <p><strong>6人：</strong>+爪牙</p>
+          <p><strong>7人：</strong>+忠臣</p>
+          <p><strong>8人：</strong>+奥伯伦</p>
+          <p><strong>9-10人：</strong>+更多忠臣/爪牙</p>
+          <p>6人: +爪牙 | 7人: +忠臣 | 8人: +奥伯伦</p>
+        </div>
+        
+        <div class="rules-section">
+        <div class="rules-section">
+          <h3>⚔️ 任务配置</h3>
+          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
+          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
+          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+        </div>
+          <h3>🎮 积分</h3>
+          <p><i class="gi gi-trophy"></i> 获胜 +100 | 💪 参与 +20</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 个人中心 -->
+    <div id="profileModal" class="modal hidden">
+      <div class="modal-content">
+        <span class="close" onclick="closeProfile()">×</span>
+        <h2><i class="gi gi-helmet"></i> 个人中心</h2>
+        <div class="avatar-upload">
+          <img id="avatarPreview" class="avatar-preview" src="" alt="头像">
+          <button class="secondary" onclick="uploadAvatar()" style="padding:8px;">🖼️ 更换头像</button>
+        </div>
+        <div class="form-group">
+          <label>手机号</label>
+          <input type="text" id="profilePhone" disabled>
+        </div>
+        <div class="form-group">
+          <label>昵称</label>
+          <input type="text" id="profileUsername">
+        </div>
+        <button onclick="updateProfile()">保存修改</button>
+        <div class="profile-stats">
+          <h3>📊 战绩</h3>
+          <div class="stat-grid">
+            <div class="stat-item"><span class="stat-value" id="statPoints">0</span><span class="stat-label">总积分</span></div>
+            <div class="stat-item"><span class="stat-value" id="statPlayed">0</span><span class="stat-label">游戏局数</span></div>
+            <div class="stat-item"><span class="stat-value" id="statWon">0</span><span class="stat-label">获胜</span></div>
+            <div class="stat-item"><span class="stat-value" id="statRate">0%</span><span class="stat-label">胜率</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none;">
+<symbol id="icon-sword" viewBox="0 0 64 64"><path fill="%23c9a227" d="M32 8L8 32l24 24 24-24L32 8zm0 4l20 20-20 20-20-20L32 12z"/></symbol>
+<symbol id="icon-shield" viewBox="0 0 64 64"><path fill="%23c9a227" d="M32 4L8 16v16c0 16 10 28 24 32 14-4 24-16 24-32V16L32 4z"/></symbol>
+<symbol id="icon-crown" viewBox="0 0 64 64"><path fill="%23c9a227" d="M8 20l8-8 8 8 8-8 8 8 8-8 8 8v8H8v-8z"/></symbol>
+<symbol id="icon-magic" viewBox="0 0 64 64"><path fill="%23c9a227" d="M32 4L4 20v24l28 16 28-16V20L32 4z"/></symbol>
+<symbol id="icon-castle" viewBox="0 0 64 64"><path fill="%23c9a227" d="M32 8L8 24v32h48V24L32 8z"/></symbol>
+<symbol id="icon-trophy" viewBox="0 0 64 64"><path fill="%23c9a227" d="M16 8h32v8H16V8zm4 12h24v4H20v-4zm-4 8h32v24H12V28h-4v24h32V28z"/></symbol>
+<symbol id="icon-scroll" viewBox="0 0 64 64"><path fill="%23c9a227" d="M8 8h48v48H8V8z"/></symbol>
+<symbol id="icon-helmet" viewBox="0 0 64 64"><path fill="%23c9a227" d="M32 4C16 4 8 16 8 32h48c0-16-8-28-24-28z"/></symbol>
+</svg>
+<script src="game.js"></script>
+</body>
+</html>
