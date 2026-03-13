@@ -1,0 +1,754 @@
+/* 魔兽世界风格 - 手机端优先 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  --bg-dark: #0d0d0d;
+  --bg-card: #1a1510;
+  --bg-input: #2a2218;
+  --gold: #c9a227;
+  --gold-bright: #ffd700;
+  --bronze: #8b5a2b;
+  --red: #8b0000;
+  --green: #228b22;
+  --text: #e8dcc4;
+  --text-dim: #9a8b7a;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  background: var(--bg-dark);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* 容器 - 手机宽度限制 */
+.container {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 8px;
+  background: linear-gradient(180deg, #0d0d0d 0%, #1a1510 100%);
+}
+
+/* 标题 */
+h1 {
+  text-align: center;
+  font-size: 1.5rem;
+  padding: 12px 0;
+  color: var(--gold-bright);
+  text-shadow: 0 2px 8px rgba(201,162,39,0.3);
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--bronze);
+}
+
+h2 {
+  font-size: 1.1rem;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+
+h3 {
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  margin: 12px 0 8px;
+}
+
+/* 卡片 */
+.card {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--bronze);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+/* 输入框 - 舒适touch */
+input {
+  width: 100%;
+  padding: 14px 12px;
+  margin: 8px 0;
+  border: 1px solid var(--bronze);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 16px; /* iOS不缩放 */
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(201,162,39,0.2);
+}
+
+input::placeholder {
+  color: var(--text-dim);
+}
+
+/* 按钮 - 大触摸区域 */
+button {
+  width: 100%;
+  padding: 15px 20px;
+  margin: 10px 0;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(180deg, #3d2e1f 0%, #2a1f15 100%);
+  color: var(--gold-bright);
+  border: 1px solid var(--bronze);
+  touch-action: manipulation;
+}
+
+button:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+button.approve {
+  background: linear-gradient(180deg, #2a5a2a 0%, #1a3a1a 100%);
+  border-color: #4CAF50;
+  color: #90EE90;
+}
+
+button.reject {
+  background: linear-gradient(180deg, #5a2020 0%, #3a1010 100%);
+  border-color: #f44336;
+  color: #FF6B6B;
+}
+
+/* 小按钮 */
+button.small {
+  width: auto;
+  padding: 8px 16px;
+  font-size: 14px;
+  margin: 5px 0;
+}
+
+/* 链接 */
+.link-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.link-buttons a {
+  color: var(--gold);
+  font-size: 13px;
+  padding: 8px 16px;
+  text-decoration: none;
+  border: 1px solid var(--bronze);
+  border-radius: 20px;
+  background: rgba(0,0,0,0.3);
+}
+
+/* 玩家列表 */
+.player-waiting-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 10px;
+  margin: 6px 0;
+}
+
+.player-avatar {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.player-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.player-status {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.player-status.host {
+  color: var(--gold);
+}
+
+/* 玩家网格 - 手机端2列 */
+.players-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.player-card {
+  padding: 10px 6px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 10px;
+  text-align: center;
+  border: 2px solid transparent;
+}
+
+.player-card.selected {
+  border-color: var(--gold);
+  background: rgba(201,162,39,0.2);
+}
+
+.player-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  margin: 0 auto 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.player-card .name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 人数选择 */
+.count-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.count-btn {
+  width: 50px !important;
+  padding: 10px 5px !important;
+  font-size: 14px !important;
+}
+
+.count-btn.selected {
+  background: rgba(201,162,39,0.3) !important;
+  border-color: var(--gold) !important;
+  color: var(--gold-bright) !important;
+}
+
+/* 进度条 */
+.game-progress {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.progress-step {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  border: 2px solid var(--bronze);
+}
+
+.progress-step.success {
+  background: var(--green);
+  border-color: #90EE90;
+}
+
+.progress-step.current {
+  background: var(--gold);
+  color: var(--bg-dark);
+  box-shadow: 0 0 10px rgba(201,162,39,0.5);
+}
+
+/* 阶段指示器 */
+.turn-indicator {
+  background: linear-gradient(180deg, #3d2e1f, #2a1f15);
+  border: 2px solid var(--gold);
+  border-radius: 10px;
+  padding: 8px;
+  margin: 12px 0;
+  text-align: center;
+}
+
+.phase-name {
+  font-size: 1.1rem;
+  color: var(--gold-bright);
+  font-weight: bold;
+}
+
+.phase-desc {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+/* 操作区 */
+.actions {
+  margin: 12px 0;
+  padding: 8px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 10px;
+}
+
+.vote-buttons {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.vote-buttons button {
+  flex: 1;
+  padding: 18px;
+}
+
+/* 弹窗 */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.modal-content {
+  background: var(--bg-card);
+  padding: 20px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 380px;
+  border: 1px solid var(--bronze);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.close {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  font-size: 28px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+/* 表格 */
+table {
+  width: 100%;
+  font-size: 14px;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 10px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--bronze);
+}
+
+th {
+  color: var(--gold);
+}
+
+/* 个人中心 */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.stat-item {
+  padding: 14px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 22px;
+  color: var(--gold-bright);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* 头像上传 */
+.avatar-upload {
+  text-align: center;
+  padding: 8px;
+}
+
+.avatar-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid var(--gold);
+  margin: 0 auto 10px;
+}
+
+/* 邀请码 */
+.invite-code {
+  text-align: center;
+  font-size: 2rem;
+  letter-spacing: 8px;
+  color: var(--gold-bright);
+  padding: 16px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 10px;
+  margin: 12px 0;
+  font-family: monospace;
+}
+
+/* 表单组 */
+.form-group {
+  margin: 12px 0;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+/* 等待提示 */
+.waiting-hint {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 8px;
+  font-size: 14px;
+}
+
+/* 结果显示 */
+.result {
+  background: rgba(0,0,0,0.6);
+  border: 2px solid var(--gold);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0;
+  text-align: center;
+}
+
+.result h3 {
+  font-size: 1.2rem;
+  margin-bottom: 4px;
+}
+
+/* 隐藏 */
+.hidden { display: none !important; }
+.screen { animation: fadeIn 0.2s ease; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Toast提示 */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bronze);
+  border-radius: 3px;
+}
+
+/* 游戏信息 */
+.game-info {
+  text-align: center;
+  margin: 8px 0;
+}
+
+.role-info {
+  font-size: 14px;
+  color: var(--gold);
+  margin-top: 4px;
+}
+
+/* 底部安全区域 */
+@media (max-height: 600px) {
+  .container { padding: 8px; }
+  h1 { padding: 10px 0; font-size: 1.3rem; }
+  .card { padding: 8px; margin-bottom: 4px; }
+  button { padding: 12px 16px; }
+}
+
+/* SVG图标 */
+.svg-icon {
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: middle;
+}
+
+/* 身份信息面板 */
+.role-info-box {
+  background: rgba(0,0,0,0.4);
+  border-radius: 8px;
+  padding: 15px;
+  margin: 15px 0;
+  border: 1px solid var(--bronze);
+}
+
+.role-info-box p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.ally-list {
+  margin-top: 15px;
+}
+
+.ally-list h4 {
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+
+.ally-list p {
+  padding: 8px;
+  margin: 5px 0;
+  background: rgba(0,0,0,0.3);
+  border-radius: 6px;
+}
+
+/* 按钮点击反馈 */
+button:active {
+  transform: scale(0.96);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* 选中状态反馈 */
+button.selected, .count-btn.selected {
+  animation: buttonPulse 0.3s ease;
+  box-shadow: 0 0 15px rgba(201,162,39,0.5);
+}
+
+@keyframes buttonPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* 玩家卡片选中反馈 */
+.player-card.selected {
+  animation: cardSelect 0.2s ease;
+  box-shadow: 0 0 20px rgba(201,162,39,0.6);
+}
+
+@keyframes cardSelect {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* 投票按钮反馈 */
+.vote-buttons button.approve:active {
+  background: linear-gradient(180deg, #4CAF50, #2a5a2a) !important;
+}
+
+.vote-buttons button.reject:active {
+  background: linear-gradient(180deg, #f44336, #5a2020) !important;
+}
+
+/* 操作按钮加载状态 */
+button.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+button.loading::after {
+  content: '...';
+  animation: dots 1s infinite;
+}
+
+@keyframes dots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
+
+/* 成功/失败反馈动画 */
+.feedback-success {
+  animation: successFlash 0.5s ease;
+}
+
+.feedback-error {
+  animation: errorShake 0.5s ease;
+}
+
+@keyframes successFlash {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(34,139,34,0.3); }
+}
+
+@keyframes errorShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* 链接按钮点击 */
+.link-buttons a:active {
+  background: rgba(201,162,39,0.3);
+  transform: scale(0.95);
+}
+
+/* 弹窗关闭按钮 */
+.close:active {
+  transform: scale(1.2);
+  color: var(--gold) !important;
+}
+
+/* 队伍成员高亮 */
+.player-card.in-team {
+  border-color: #4CAF50 !important;
+  background: rgba(76,175,80,0.2) !important;
+}
+
+/* 当前队长高亮 */
+.player-card.is-leader {
+  border-color: var(--gold-bright) !important;
+  box-shadow: 0 0 15px rgba(201,162,39,0.5);
+}
+
+.player-card.is-leader::before {
+  content: '👑';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 14px;
+}
+
+/* 任务执行中高亮 */
+.player-card.on-mission {
+  animation: missionPulse 1s infinite;
+}
+
+@keyframes missionPulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(201,162,39,0.3); }
+  50% { box-shadow: 0 0 20px rgba(201,162,39,0.8); }
+}
+
+/* 规则弹窗样式修复 */
+.rules-section {
+  margin: 15px 0;
+  padding: 15px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 10px;
+  border: 1px solid var(--bronze);
+}
+
+.rules-section h3 {
+  margin: 12px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--bronze);
+  color: var(--gold);
+}
+
+.rules-section:first-child {
+  margin-top: 0;
+}
+
+.rules-section p {
+  margin: 8px 0;
+  line-height: 1.6;
+  padding: 0 5px;
+}
+
+.rules-section ol, .rules-section ul {
+  margin: 10px 0;
+  padding-left: 25px;
+}
+
+.rules-section li {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.rules-section table {
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.rules-section td {
+  padding: 8px 10px;
+}
+
+/* 弹窗内容间距 */
+.modal-content {
+  padding: 25px;
+}
+
+.modal-content h2 {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--bronze);
+}
+
+/* 紧凑布局 */
+.container {
+  padding-top: 8px;
+}
+
+h1 {
+  line-height: 1.2;
+}
+
+/* 隐藏多余的按钮 */
+#loginScreen #hostActions {
+  display: none;
+}

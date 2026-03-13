@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none;">
+<symbol id="icon-sword" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M32 8L8 32l24 24 24-24L32 8zm0 4l20 20-20 20-20-20L32 12z"/>
+</symbol>
+<symbol id="icon-shield" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M32 4L8 16v16c0 16 10 28 24 32 14-4 24-16 24-32V16L32 4z"/>
+</symbol>
+<symbol id="icon-crown" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M8 20l8-8 8 8 8-8 8 8 8-8 8 8v8H8v-8z"/>
+</symbol>
+<symbol id="icon-magic" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M32 4L4 20v24l28 16 28-16V20L32 4zm0 8l20 12-20 12-20-12L32 12z"/>
+</symbol>
+<symbol id="icon-castle" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M8 56V32l8-8v-8h8v8l8 8v24H8zm32 0V24l8-8v-8h8v8l8 8v32H40z"/>
+</symbol>
+<symbol id="icon-trophy" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M16 8h32v8H16V8zm4 12h24v4H20v-4zm-4 8h32v24H12V28h-4v24h32V28h-4V28z"/>
+</symbol>
+<symbol id="icon-scroll" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M8 8h48v48H8V8zm4 4v40h40V12H12zm4 8h32v4H16v-4zm0 8h32v4H16v-4zm0 8h24v4H16v-4z"/>
+</symbol>
+<symbol id="icon-helmet" viewBox="0 0 64 64">
+<path fill="#c9a227" d="M32 4C16 4 8 16 8 32h48c0-16-8-28-24-28zm0 8c12 0 16 8 16 20H16c0-12 4-20 16-20z"/>
+</symbol>
+</svg>
