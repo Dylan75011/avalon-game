@@ -17,10 +17,9 @@
         <input type="tel" id="phone" placeholder="手机号" maxlength="11">
         <input type="text" id="username" placeholder="昵称（可选）">
         <button onclick="register()">进入游戏</button>
-        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
-        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
+        <button id="testModeBtn" class="secondary hidden" onclick="startTestGame()">🧪 开始测试模式</button>
+        <button id="hostDismissBtn" class="reject hidden" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
       </div>
-        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
       </div>
       <div class="link-buttons">
           <a href="#" onclick="showRanking(); return false;"><i class="gi gi-trophy"></i> 排行榜</a>
@@ -47,11 +46,8 @@
           <p>游戏局数: <span id="gamesPlayed">0</span></p>
           <p>获胜次数: <span id="gamesWon">0</span></p>
         </div>
-        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
-        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
-      </div>
-        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
-      </div>
+        <button id="testModeBtn" class="secondary hidden" onclick="startTestGame()">🧪 开始测试模式</button>
+        <button id="hostDismissBtn" class="reject hidden" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
       <div class="link-buttons">
           <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 游戏规则</a>
           <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
@@ -102,6 +98,10 @@
     </div>
 
     <!-- 游戏 -->
+    <div id="hostActions" class="actions hidden">
+        <button id="hostDismissBtn" class="reject hidden" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
+      </div>
+
     <div id="gameScreen" class="screen hidden">
       <div class="card">
         <h2><i class="gi gi-sword"></i> 战役进行中</h2>
@@ -142,8 +142,8 @@
           <p id="resultMessage"></p>
         </div>
         
-        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
-        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
+        <button id="testModeBtn" class="secondary hidden" onclick="startTestGame()">🧪 开始测试模式</button>
+        <button id="hostDismissBtn" class="reject hidden" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
       </div>
         <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
       </div>

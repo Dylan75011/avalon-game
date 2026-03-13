@@ -752,3 +752,96 @@ h1 {
 #loginScreen #hostActions {
   display: none;
 }
+
+/* 额外移动端优化 */
+@media (max-width: 480px) {
+  .container {
+    max-width: 100%;
+    padding: 6px;
+  }
+  
+  .card {
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+  }
+  
+  h1 {
+    font-size: 1.3rem;
+    padding: 10px 0;
+  }
+  
+  h2 {
+    font-size: 1rem;
+  }
+  
+  button {
+    padding: 14px 16px;
+    font-size: 15px;
+    margin: 8px 0;
+  }
+  
+  input {
+    padding: 12px 10px;
+    font-size: 15px;
+  }
+  
+  .players-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  
+  .player-card {
+    padding: 8px 4px;
+  }
+  
+  .player-card-avatar {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .invite-code {
+    font-size: 1.5rem;
+    letter-spacing: 4px;
+    padding: 12px;
+  }
+  
+  .modal-content {
+    padding: 16px;
+    margin: 8px;
+  }
+  
+  .count-btn {
+    width: 44px !important;
+    padding: 8px 4px !important;
+    font-size: 13px !important;
+  }
+  
+  .vote-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .vote-buttons button {
+    width: 100%;
+  }
+}
+
+/* 防止iOS缩放 */
+input[type="text"],
+input[type="tel"],
+input[type="number"] {
+  font-size: 16px;
+}
+
+/* 触摸优化 */
+button, a {
+  -webkit-tap-highlight-color: rgba(201, 162, 39, 0.3);
+}
+
+/* 安全区域适配 */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .container {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

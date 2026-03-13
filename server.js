@@ -717,7 +717,10 @@ function saveDb() {
 }
 
 // 启动服务器
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`阿瓦隆游戏服务器运行在 http://localhost:${PORT}`);
+const PORT = 80;
+
+initDb().then(() => {
+  server.listen(PORT, () => {
+    console.log(`阿瓦隆游戏服务器运行在 http://localhost:${PORT}`);
+  });
 });

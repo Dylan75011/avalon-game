@@ -263,6 +263,11 @@ socket.on('gameStarted', (data) => {
   // 显示角色信息
   showRoleStart(data);
   document.getElementById("identityBtn").classList.remove("hidden");
+  // 如果是房主，显示解散按钮
+  if (gamePlayers.length > 0 && gamePlayers[0].phone === currentUser.phone) {
+    document.getElementById("hostDismissBtn").classList.remove("hidden");
+    document.getElementById("hostActions").classList.remove("hidden");
+  }
   
   updatePhase("🎮 游戏开始", "你的角色: " + myRole);
   toast("游戏开始！你的角色: " + myRole, "success");
