@@ -101,7 +101,8 @@ io.on('connection', (socket) => {
 
   // 用户注册/登录
   socket.on('register', (userData, callback) => {
-    const { phone, username } = userData;
+    const { phone } = userData;
+    const username = normalizeUsername(userData.username, phone);
     
     if (!phone || phone.length !== 11) {
       callback({ success: false, message: '请输入11位手机号' });
@@ -110,12 +111,12 @@ io.on('connection', (socket) => {
 
     try {
       // 检查用户是否存在
-      const existing = db.exec(`SELECT * FROM users WHERE phone = '${phone}'`);
+      const existing = db.exec(`SELECT * FROM users WHERE phone = ?`, [phone]);
       const isNew = existing.length === 0 || existing[0].values.length === 0;
       
       if (isNew) {
         // 新用户
-        db.run(`INSERT INTO users (phone, username, total_points, games_played, games_won) VALUES (?, ?, 0, 0, 0)`, [phone, username || '玩家' + phone.slice(-4)]);
+        db.run(`INSERT INTO users (phone, username, total_points, games_played, games_won) VALUES (?, ?, 0, 0, 0)`, [phone, username]);
       } else if (username) {
         // 老用户但提供了新昵称
         db.run(`UPDATE users SET username = ? WHERE phone = ?`, [username, phone]);
@@ -124,11 +125,11 @@ io.on('connection', (socket) => {
       saveDb();
       
       // 获取用户信息
-      const userResult = db.exec(`SELECT * FROM users WHERE phone = '${phone}'`);
+      const userResult = db.exec(`SELECT * FROM users WHERE phone = ?`, [phone]);
       const user = {
         phone: userResult[0].values[0][0],
         username: userResult[0].values[0][1],
-        points: userResult[0].values[0][2],
+        total_points: userResult[0].values[0][2],
         games_played: userResult[0].values[0][3],
         games_won: userResult[0].values[0][4]
       };
@@ -150,7 +151,7 @@ io.on('connection', (socket) => {
       callback(null);
       return;
     }
-    const result = db.exec(`SELECT * FROM users WHERE phone = '${phone}'`);
+    const result = db.exec(`SELECT * FROM users WHERE phone = ?`, [phone]);
     if (result.length > 0 && result[0].values.length > 0) {
       callback({
         phone: result[0].values[0][0],
@@ -192,6 +193,14 @@ io.on('connection', (socket) => {
   // 创建房间
   socket.on('createRoom', (data, callback) => {
     const { phone, playerCount } = data;
+    if (!socket.phone || socket.phone !== phone) {
+      callback({ success: false, message: '请先登录后创建房间' });
+      return;
+    }
+    if (!Number.isInteger(playerCount) || playerCount < 5 || playerCount > 10) {
+      callback({ success: false, message: '仅支持 5 到 10 人游戏' });
+      return;
+    }
     const roomId = generateInviteCode();
     const requiredPlayers = playerCount || 5; // 默认5人局
     
@@ -208,7 +217,12 @@ io.on('connection', (socket) => {
         players: [{ phone, username: socket.username || '玩家' + phone.slice(-4), socketId: socket.id, isLeader: true, status: 'alive', role: null }],
         status: 'waiting',
         currentRound: 0,
-        gameData: {}
+        gameData: {
+          leaderIndex: 0,
+          proposalCount: 0,
+          phase: 'waiting',
+          missionHistory: []
+        }
       };
       
       rooms.set(roomId, room);
@@ -218,7 +232,8 @@ io.on('connection', (socket) => {
       callback({ 
         success: true, 
         roomId,
-        players: room.players
+        players: room.players,
+        requiredPlayers
       });
     } catch (err) {
       callback({ success: false, message: err.message });
@@ -235,19 +250,26 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.players.length >= 10) {
-      callback({ success: false, message: '房间已满' });
-      return;
-    }
-
-    if (room.status !== 'waiting') {
-      callback({ success: false, message: '游戏已开始' });
+    if (!socket.phone || socket.phone !== phone) {
+      callback({ success: false, message: '身份校验失败，请重新登录' });
       return;
     }
 
     const existingPlayer = room.players.find(p => p.phone === phone);
+
+    if (room.players.length >= 10 && !existingPlayer) {
+      callback({ success: false, message: '房间已满' });
+      return;
+    }
+
+    if (room.status !== 'waiting' && !existingPlayer) {
+      callback({ success: false, message: '游戏已开始' });
+      return;
+    }
+
     if (existingPlayer) {
       existingPlayer.socketId = socket.id;
+      existingPlayer.username = socket.username || existingPlayer.username;
     } else {
       room.players.push({ phone, username: socket.username || '玩家' + phone.slice(-4), socketId: socket.id, isLeader: false, status: 'alive', role: null });
       db.run(`INSERT INTO room_players (room_id, phone) VALUES (?, ?)`, [roomId, phone]);
@@ -257,16 +279,33 @@ io.on('connection', (socket) => {
     socket.roomId = roomId;
     saveDb();
 
-    io.to(room.id).emit('playerJoined', {
-      players: room.players
-    });
+    if (!existingPlayer) {
+      io.to(room.id).emit('playerJoined', {
+        players: room.players
+      });
+    }
 
-    callback({ success: true, players: room.players, status: room.status });
+    callback({
+      success: true,
+      players: room.players,
+      status: room.status,
+      requiredPlayers: room.requiredPlayers,
+      gameState: existingPlayer && room.status !== 'waiting' ? buildGameStateForPlayer(room, existingPlayer) : null
+    });
   });
 
   // 离开房间
   socket.on('leaveRoom', (data, callback) => {
     const { roomId, phone } = data;
+    if (!socket.phone || socket.phone !== phone) {
+      callback({ success: false, message: '身份校验失败' });
+      return;
+    }
+    const room = rooms.get(roomId);
+    if (room && room.status === 'in_progress') {
+      callback({ success: false, message: '对局进行中不能退出，请保持在线或由房主解散房间' });
+      return;
+    }
     handleLeaveRoom(socket, roomId, phone);
     callback({ success: true });
   });
@@ -281,8 +320,18 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (room.host !== socket.phone) {
+      callback({ success: false, message: '只有房主可以开始游戏' });
+      return;
+    }
+
+    if (room.status !== 'waiting') {
+      callback({ success: false, message: '游戏已经开始' });
+      return;
+    }
+
     const required = room.requiredPlayers || 5;
-    if (room.players.length < required) {
+    if (room.players.length !== required) {
       callback({ success: false, message: `需要${required}人才能开始，当前${room.players.length}人` });
       return;
     }
@@ -290,19 +339,23 @@ io.on('connection', (socket) => {
     assignRoles(room);
     room.status = 'in_progress';
     room.currentRound = 1;
+    room.gameData.phase = 'team_building';
+    room.gameData.leaderIndex = 0;
+    room.gameData.proposalCount = 0;
+    room.gameData.pendingTeam = null;
+    room.gameData.approvedTeam = null;
+    room.gameData.assassinationLocked = false;
+    room.gameData.votes = {};
+    room.gameData.missionResults = {};
     
     db.run(`UPDATE rooms SET game_status = 'in_progress', current_round = 1 WHERE room_id = ?`, [roomId]);
     saveDb();
 
     // 发送游戏开始事件给每个玩家，包含各自的可见信息
     room.players.forEach(player => {
-      io.to(player.socketId).emit('gameStarted', {
-        players: room.players.map(p => ({ phone: p.phone, username: p.username, avatar: p.avatar })),
-        round: 1,
-        myRole: player.role,
-        mySees: player.sees, // 该玩家能看到的身份信息
-        playerCount: room.players.length
-      });
+      if (player.socketId) {
+        io.to(player.socketId).emit('gameStarted', buildGameStateForPlayer(room, player));
+      }
     });
 
     callback({ success: true });
@@ -310,7 +363,7 @@ io.on('connection', (socket) => {
 
   // 提交团队
   socket.on('submitTeam', (data, callback) => {
-    const { roomId, teamIndices, leaderPhone } = data;
+    const { roomId, teamIndices } = data;
     const room = rooms.get(roomId);
 
     if (!room) {
@@ -318,13 +371,41 @@ io.on('connection', (socket) => {
       return;
     }
 
-    room.gameData.pendingTeam = teamIndices;
+    if (room.status !== 'in_progress' || room.gameData.phase !== 'team_building') {
+      callback({ success: false, message: '当前不是组队阶段' });
+      return;
+    }
+
+    const leader = room.players[room.gameData.leaderIndex];
+    if (!leader || leader.phone !== socket.phone) {
+      callback({ success: false, message: '只有当前队长可以提交队伍' });
+      return;
+    }
+
+    if (!Array.isArray(teamIndices)) {
+      callback({ success: false, message: '队伍格式错误' });
+      return;
+    }
+
+    const uniqueTeam = [...new Set(teamIndices)];
+    const requiredTeamSize = getMissionTeamSize(room.players.length, room.currentRound);
+    const isValidIndex = uniqueTeam.every(index => Number.isInteger(index) && index >= 0 && index < room.players.length);
+    if (!isValidIndex || uniqueTeam.length !== requiredTeamSize) {
+      callback({ success: false, message: `本轮需要选择${requiredTeamSize}名队员` });
+      return;
+    }
+
+    room.gameData.pendingTeam = uniqueTeam;
+    room.gameData.approvedTeam = null;
     room.gameData.votes = {};
+    room.gameData.phase = 'voting';
     saveDb();
 
     io.to(room.id).emit('teamProposed', {
-      teamIndices,
-      leaderPhone
+      teamIndices: uniqueTeam,
+      leaderPhone: leader.phone,
+      leaderUsername: leader.username,
+      requiredTeamSize
     });
 
     callback({ success: true });
@@ -332,15 +413,32 @@ io.on('connection', (socket) => {
 
   // 投票
   socket.on('vote', (data, callback) => {
-    const { roomId, phone, vote } = data;
+    const { roomId } = data;
+    const vote = data.vote || data.choice;
     const room = rooms.get(roomId);
 
-    if (!room || !room.gameData.pendingTeam) {
+    if (!room || !room.gameData.pendingTeam || room.gameData.phase !== 'voting') {
       callback({ success: false, message: '无效操作' });
       return;
     }
 
-    room.gameData.votes[phone] = vote;
+    if (!['approve', 'reject'].includes(vote)) {
+      callback({ success: false, message: '投票无效' });
+      return;
+    }
+
+    const player = room.players.find(p => p.phone === socket.phone);
+    if (!player) {
+      callback({ success: false, message: '你不在当前房间中' });
+      return;
+    }
+
+    if (room.gameData.votes[socket.phone]) {
+      callback({ success: false, message: '你已经投过票了' });
+      return;
+    }
+
+    room.gameData.votes[socket.phone] = vote;
     saveDb();
 
     const votesNeeded = room.players.length;
@@ -350,9 +448,37 @@ io.on('connection', (socket) => {
       const approveVotes = Object.values(room.gameData.votes).filter(v => v === 'approve').length;
       const isApproved = approveVotes > votesNeeded / 2;
 
+      room.gameData.proposalCount = (room.gameData.proposalCount || 0) + 1;
+      if (isApproved) {
+        room.gameData.phase = 'mission';
+        room.gameData.approvedTeam = [...room.gameData.pendingTeam];
+        room.gameData.missionResults = {};
+      } else {
+        room.gameData.phase = 'team_building';
+      }
+      saveDb();
+
       io.to(room.id).emit('voteResult', {
         votes: room.gameData.votes,
-        isApproved
+        isApproved,
+        approvedTeamPhones: isApproved ? room.gameData.approvedTeam.map(index => room.players[index].phone) : []
+      });
+
+      if (isApproved) {
+        return callback({ success: true });
+      }
+
+      if (room.gameData.proposalCount >= 5) {
+        endGame(room, io, 'evil', '连续5次组队投票失败，坏人胜利！');
+        return callback({ success: true });
+      }
+
+      rotateLeader(room);
+      io.to(room.id).emit('nextRound', {
+        round: room.currentRound,
+        leaderPhone: room.players[room.gameData.leaderIndex].phone,
+        leaderUsername: room.players[room.gameData.leaderIndex].username,
+        proposalCount: room.gameData.proposalCount
       });
     }
 
@@ -361,7 +487,7 @@ io.on('connection', (socket) => {
 
   // 执行任务
   socket.on('submitMission', (data, callback) => {
-    const { roomId, phone, result } = data;
+    const { roomId, result } = data;
     const room = rooms.get(roomId);
 
     if (!room) {
@@ -369,33 +495,68 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (room.status !== 'in_progress' || room.gameData.phase !== 'mission' || !Array.isArray(room.gameData.approvedTeam)) {
+      callback({ success: false, message: '当前不是任务阶段' });
+      return;
+    }
+
+    if (!['success', 'fail'].includes(result)) {
+      callback({ success: false, message: '任务结果无效' });
+      return;
+    }
+
+    const playerIndex = room.players.findIndex(p => p.phone === socket.phone);
+    if (playerIndex === -1) {
+      callback({ success: false, message: '你不在当前房间中' });
+      return;
+    }
+
+    if (!room.gameData.approvedTeam.includes(playerIndex)) {
+      callback({ success: false, message: '只有任务队员可以提交结果' });
+      return;
+    }
+
+    if (room.gameData.missionResults[socket.phone]) {
+      callback({ success: false, message: '你已经提交过结果了' });
+      return;
+    }
+
+    const player = room.players[playerIndex];
+    const canFail = ['assassin', 'minion', 'oberon'].includes(player.role);
+    if (result === 'fail' && !canFail) {
+      callback({ success: false, message: '好人不能提交失败票' });
+      return;
+    }
+
     room.gameData.missionResults = room.gameData.missionResults || {};
-    room.gameData.missionResults[phone] = result;
+    room.gameData.missionResults[socket.phone] = result;
     saveDb();
 
-    const teamIndices = room.gameData.pendingTeam;
+    const teamIndices = room.gameData.approvedTeam;
     const teamPlayers = teamIndices.map(i => room.players[i]);
     const votesNeeded = teamPlayers.length;
     const currentVotes = Object.keys(room.gameData.missionResults).length;
 
     if (currentVotes >= votesNeeded) {
       const fails = Object.values(room.gameData.missionResults).filter(r => r === 'fail').length;
-      const missionSuccess = fails === 0;
+      const missionSuccess = fails < getMissionFailureThreshold(room.players.length, room.currentRound);
 
       // 记录任务结果
       room.gameData.missionHistory = room.gameData.missionHistory || [];
       room.gameData.missionHistory.push(missionSuccess);
+      room.gameData.phase = 'resolving_mission';
       
       const successes = room.gameData.missionHistory.filter(s => s).length;
       const failures = room.gameData.missionHistory.filter(s => !s).length;
 
       io.to(room.id).emit('missionResult', {
-        results: room.gameData.missionResults,
         success: missionSuccess,
         fails,
         successes,
         failures,
-        round: room.currentRound
+        round: room.currentRound,
+        missionHistory: room.gameData.missionHistory,
+        teamSize: votesNeeded
       });
 
       // 检查胜负
@@ -418,9 +579,19 @@ io.on('connection', (socket) => {
       callback({ success: false, message: '房间不存在' });
       return;
     }
+
+    if (room.gameData.phase !== 'assassination') {
+      callback({ success: false, message: '当前不是刺杀阶段' });
+      return;
+    }
+
+    if (room.gameData.assassinationLocked) {
+      callback({ success: false, message: '刺杀已提交，等待结算' });
+      return;
+    }
     
     const assassin = room.players.find(p => p.role === 'assassin');
-    if (assassin.phone !== socket.phone) {
+    if (!assassin || assassin.phone !== socket.phone) {
       callback({ success: false, message: '你不是刺客' });
       return;
     }
@@ -432,6 +603,8 @@ io.on('connection', (socket) => {
     }
     
     const success = target.role === 'merlin';
+    room.gameData.assassinationLocked = true;
+    room.gameData.phase = 'resolving_assassination';
     
     io.to(room.id).emit('assassinationResult', {
       success
@@ -451,7 +624,7 @@ io.on('connection', (socket) => {
 
   // 身份操作 - 查看队友
   socket.on('checkAlly', (data, callback) => {
-    const { roomId, phone } = data;
+    const { roomId } = data;
     const room = rooms.get(roomId);
     
     if (!room) {
@@ -459,7 +632,7 @@ io.on('connection', (socket) => {
       return;
     }
     
-    const player = room.players.find(p => p.phone === phone);
+    const player = room.players.find(p => p.phone === socket.phone);
     if (!player) {
       callback({ success: false, message: '玩家不存在' });
       return;
@@ -470,33 +643,9 @@ io.on('connection', (socket) => {
 
   // 身份操作 - 指认目标（刺客专用）
   socket.on('accuse', (data, callback) => {
-    const { roomId, phone, targetPhone } = data;
-    const room = rooms.get(roomId);
-    
-    if (!room) {
-      callback({ success: false, message: '房间不存在' });
-      return;
-    }
-    
-    const player = room.players.find(p => p.phone === phone);
-    const target = room.players.find(p => p.phone === targetPhone);
-    
-    if (!player || !target) {
-      callback({ success: false, message: '玩家不存在' });
-      return;
-    }
-    
-    if (player.role !== 'assassin') {
-      callback({ success: false, message: '只有刺客可以指认' });
-      return;
-    }
-    
-    const isEvil = ['assassin', 'minion', 'oberon'].includes(target.role);
-    callback({ 
-      success: true, 
-      result: isEvil ? '正确！他是坏人' : '错误！他是好人',
-      isCorrect: isEvil,
-      targetRole: target.role
+    callback({
+      success: false,
+      message: '验人功能已关闭，避免破坏阿瓦隆推理体验。请在刺杀阶段直接选择目标。'
     });
   });
 
@@ -509,10 +658,16 @@ io.on('connection', (socket) => {
       callback({ success: false, message: '房间不存在' });
       return;
     }
+
+    if (phone !== socket.phone || room.host !== socket.phone) {
+      callback({ success: false, message: '只有房主可以开启测试模式' });
+      return;
+    }
     
     // 填充AI玩家
     const aiNames = ['小明', '小红', '小刚', '小强'];
-    for (let i = 0; i < 4; i++) {
+    while (room.players.length < 5) {
+      const i = room.players.length - 1;
       const aiPhone = 'test_' + Date.now() + '_' + i;
       room.players.push({
         phone: aiPhone,
@@ -528,7 +683,16 @@ io.on('connection', (socket) => {
     assignRoles(room);
     room.status = 'in_progress';
     room.currentRound = 1;
-    room.gameData = { currentRound: 1, missionResults: {} };
+    room.gameData = {
+      leaderIndex: 0,
+      proposalCount: 0,
+      phase: 'team_building',
+      missionResults: {},
+      missionHistory: [],
+      pendingTeam: null,
+      approvedTeam: null,
+      assassinationLocked: false
+    };
     
     // 分配角色
     room.players.forEach(player => {
@@ -538,13 +702,7 @@ io.on('connection', (socket) => {
     // 发送游戏开始
     room.players.forEach(player => {
       if (player.socketId) {
-        io.to(player.socketId).emit('gameStarted', {
-          players: room.players.map(p => ({ phone: p.phone, username: p.username, avatar: p.avatar })),
-          round: 1,
-          myRole: player.role,
-          mySees: player.sees,
-          playerCount: room.players.length
-        });
+        io.to(player.socketId).emit('gameStarted', buildGameStateForPlayer(room, player));
       }
     });
     
@@ -561,7 +719,7 @@ io.on('connection', (socket) => {
       return;
     }
     
-    if (room.host !== phone) {
+    if (socket.phone !== phone || room.host !== socket.phone) {
       callback({ success: false, message: '只有房主可以解散游戏' });
       return;
     }
@@ -581,7 +739,15 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('断开连接:', socket.id);
     if (socket.roomId && socket.phone) {
-      handleLeaveRoom(socket, socket.roomId, socket.phone);
+      const room = rooms.get(socket.roomId);
+      if (room && room.status === 'in_progress') {
+        const player = room.players.find(p => p.phone === socket.phone);
+        if (player) {
+          player.socketId = null;
+        }
+      } else {
+        handleLeaveRoom(socket, socket.roomId, socket.phone);
+      }
     }
   });
 });
@@ -602,6 +768,7 @@ function handleLeaveRoom(socket, roomId, phone) {
     db.run(`DELETE FROM rooms WHERE room_id = ?`, [roomId]);
   } else {
     if (room.host === phone) {
+      room.players.forEach(player => { player.isLeader = false; });
       room.host = room.players[0].phone;
       room.players[0].isLeader = true;
     }
@@ -632,23 +799,34 @@ function checkWinCondition(room, io) {
   }
   
   // 3次成功 = 进入刺杀阶段
-  if (successes >= 3) {
-    // 通知刺客选择梅林
-    const assassin = room.players.find(p => p.role === 'assassin');
-    if (assassin) {
-      io.to(room.id).emit('assassinationPhase', {
-        message: '好人已完成3轮任务，刺客选择梅林！'
-      });
+    if (successes >= 3) {
+      // 通知刺客选择梅林
+      const assassin = room.players.find(p => p.role === 'assassin');
+      if (assassin) {
+        room.gameData.phase = 'assassination';
+        room.gameData.assassinationLocked = false;
+        io.to(room.id).emit('assassinationPhase', {
+          message: '好人已完成3轮任务，刺客选择梅林！',
+          assassinPhone: assassin.phone,
+          targets: room.players
+            .filter(player => player.phone !== assassin.phone)
+            .map(player => ({ phone: player.phone, username: player.username }))
+        });
+      }
+      return;
     }
-    return;
-  }
   
   // 继续下一轮
   room.currentRound++;
+  room.gameData.proposalCount = 0;
+  room.gameData.phase = 'team_building';
   room.gameData.votes = {};
   room.gameData.missionResults = {};
   room.gameData.pendingTeam = null;
-  room.gameData.leaderIndex = (room.gameData.leaderIndex + 1) % room.players.length;
+  room.gameData.approvedTeam = null;
+  rotateLeader(room);
+  db.run(`UPDATE rooms SET current_round = ? WHERE room_id = ?`, [room.currentRound, room.id]);
+  saveDb();
   
   const nextLeader = room.players[room.gameData.leaderIndex];
   if (!nextLeader) {
@@ -658,7 +836,9 @@ function checkWinCondition(room, io) {
   
   io.to(room.id).emit('nextRound', {
     round: room.currentRound,
-    leader: nextLeader.username
+    leaderPhone: nextLeader.phone,
+    leaderUsername: nextLeader.username,
+    proposalCount: room.gameData.proposalCount
   });
 }
 
@@ -674,13 +854,13 @@ function endGame(room, io, winner, reason) {
   
   goodPlayers.forEach(p => {
     const won = winner === 'good';
-    db.run(`UPDATE users SET points = points + ?, games_played = games_played + 1, games_won = games_won + ? WHERE phone = ?`, 
+    db.run(`UPDATE users SET total_points = total_points + ?, games_played = games_played + 1, games_won = games_won + ? WHERE phone = ?`, 
       [won ? 100 : 20, won ? 1 : 0, p.phone]);
   });
   
   evilPlayers.forEach(p => {
     const won = winner === 'evil';
-    db.run(`UPDATE users SET points = points + ?, games_played = games_played + 1, games_won = games_won + ? WHERE phone = ?`, 
+    db.run(`UPDATE users SET total_points = total_points + ?, games_played = games_played + 1, games_won = games_won + ? WHERE phone = ?`, 
       [won ? 100 : 20, won ? 1 : 0, p.phone]);
   });
   
@@ -693,24 +873,29 @@ function endGame(room, io, winner, reason) {
   });
   
   room.status = 'ended';
+  room.gameData.phase = 'ended';
 }
 
 // 生成邀请码
 function generateInviteCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  do {
+    code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+  } while (rooms.has(code));
   return code;
 }
 
 // 保存数据库
 function saveDb() {
   try {
+    fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
     const data = db.export();
     const buffer = Buffer.from(data);
-    fs.writeFileSync('data/game.db', buffer);
+    fs.writeFileSync(DB_FILE, buffer);
   } catch (err) {
     console.error('保存数据库失败:', err);
   }
@@ -718,6 +903,140 @@ function saveDb() {
 
 // 启动服务器
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`阿瓦隆游戏服务器运行在 http://localhost:${PORT}`);
+initDb().then(() => {
+  server.listen(PORT, () => {
+    console.log(`阿瓦隆游戏服务器运行在 http://localhost:${PORT}`);
+  });
+}).catch((err) => {
+  console.error('数据库初始化失败:', err);
+  process.exit(1);
 });
+
+function assignRoles(room) {
+  const roles = getRolesForPlayerCount(room.players.length);
+  const shuffledRoles = shuffleArray(roles);
+  const shuffledPlayers = shuffleArray([...room.players]);
+
+  shuffledPlayers.forEach((player, index) => {
+    player.role = shuffledRoles[index];
+  });
+
+  room.players.forEach(player => {
+    player.sees = getPlayerVision(player, room.players);
+  });
+}
+
+function getRolesForPlayerCount(playerCount) {
+  const rolesByCount = {
+    5: ['merlin', 'percival', 'loyalist', 'loyalist', 'assassin'],
+    6: ['merlin', 'percival', 'loyalist', 'loyalist', 'assassin', 'minion'],
+    7: ['merlin', 'percival', 'loyalist', 'loyalist', 'loyalist', 'assassin', 'minion'],
+    8: ['merlin', 'percival', 'loyalist', 'loyalist', 'loyalist', 'assassin', 'minion', 'oberon'],
+    9: ['merlin', 'percival', 'loyalist', 'loyalist', 'loyalist', 'loyalist', 'assassin', 'minion', 'oberon'],
+    10: ['merlin', 'percival', 'loyalist', 'loyalist', 'loyalist', 'loyalist', 'loyalist', 'assassin', 'minion', 'oberon']
+  };
+  return rolesByCount[playerCount] || rolesByCount[5];
+}
+
+function getPlayerVision(player, players) {
+  const evilPlayers = players.filter(p => ['assassin', 'minion', 'oberon'].includes(p.role));
+  const knownEvil = players.filter(p => ['assassin', 'minion'].includes(p.role));
+
+  switch (player.role) {
+    case 'merlin':
+      return knownEvil.map(p => ({ phone: p.phone, username: p.username, type: 'evil' }));
+    case 'percival':
+      return players
+        .filter(p => p.role === 'merlin')
+        .map(p => ({ phone: p.phone, username: p.username, type: 'unknown' }));
+    case 'assassin':
+    case 'minion':
+      return evilPlayers
+        .filter(p => p.phone !== player.phone && p.role !== 'oberon')
+        .map(p => ({ phone: p.phone, username: p.username, type: 'evil' }));
+    default:
+      return [];
+  }
+}
+
+function buildGameStateForPlayer(room, player) {
+  const currentLeader = room.players[room.gameData.leaderIndex] || room.players[0];
+  const assassinationTargets = room.gameData.phase === 'assassination' && player.role === 'assassin'
+    ? room.players
+      .filter(candidate => candidate.phone !== player.phone)
+      .map(candidate => ({ phone: candidate.phone, username: candidate.username }))
+    : [];
+  return {
+    players: room.players.map(p => ({
+      phone: p.phone,
+      username: p.username,
+      avatar: p.avatar,
+      isLeader: p.phone === room.host
+    })),
+    round: room.currentRound,
+    myRole: player.role,
+    mySees: player.sees || [],
+    playerCount: room.players.length,
+    leaderPhone: currentLeader ? currentLeader.phone : null,
+    leaderUsername: currentLeader ? currentLeader.username : '',
+    phase: room.gameData.phase,
+    proposalCount: room.gameData.proposalCount || 0,
+    approvedTeamPhones: Array.isArray(room.gameData.approvedTeam)
+      ? room.gameData.approvedTeam.map(index => room.players[index].phone)
+      : [],
+    missionHistory: room.gameData.missionHistory || [],
+    assassinationTargets
+  };
+}
+
+function updateGameStats(room) {
+  if (!room || !room.id) return;
+  db.run(`UPDATE rooms SET current_round = ? WHERE room_id = ?`, [room.currentRound, room.id]);
+  saveDb();
+}
+
+function rotateLeader(room) {
+  if (!room.players.length) return;
+  room.gameData.leaderIndex = ((room.gameData.leaderIndex || 0) + 1) % room.players.length;
+}
+
+function getMissionTeamSize(playerCount, round) {
+  const sizes = {
+    5: [2, 3, 2, 3, 3],
+    6: [2, 3, 4, 3, 4],
+    7: [2, 3, 3, 4, 4],
+    8: [3, 4, 4, 5, 5],
+    9: [3, 4, 4, 5, 5],
+    10: [3, 4, 4, 5, 5]
+  };
+  const rounds = sizes[playerCount] || sizes[5];
+  return rounds[Math.max(0, round - 1)] || rounds[0];
+}
+
+function getMissionFailureThreshold(playerCount, round) {
+  return playerCount >= 7 && round === 4 ? 2 : 1;
+}
+
+function shuffleArray(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function normalizeUsername(username, phone) {
+  const fallback = '玩家' + String(phone || '').slice(-4);
+  if (!username || typeof username !== 'string') {
+    return fallback;
+  }
+
+  const normalized = username
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[<>]/g, '')
+    .trim()
+    .slice(0, 16);
+
+  return normalized || fallback;
+}

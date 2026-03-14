@@ -3,11 +3,17 @@
 let socket = io();
 let currentUser = null;
 let currentRoom = null;
-  document.getElementById("identityBtn").classList.add("hidden");
 let selectedTeam = [];
 let selectedPlayerCount = 5;
 let gamePlayers = [];
 let myRole = null;
+let currentLeaderPhone = null;
+let approvedTeamPhones = [];
+let currentRound = 0;
+let currentPhase = 'waiting';
+let requiredTeamSize = 0;
+
+setIdentityButtonsVisible(false);
 
 // 本地存储
 function checkLoginState() {
@@ -29,14 +35,94 @@ function saveLoginState(user) {
   localStorage.setItem("avalon_user", JSON.stringify(user));
 }
 
-// 头像生成
+function setIdentityButtonsVisible(visible) {
+  document.querySelectorAll('.identity-btn').forEach((button) => {
+    button.classList.toggle('hidden', !visible);
+  });
+}
+
+function hideGameActions() {
+  const ids = ['leaderActions', 'voteActions', 'missionActions'];
+  ids.forEach((id) => {
+    const element = document.getElementById(id);
+    if (element) element.classList.add('hidden');
+  });
+}
+
+function resetGameViewState() {
+  selectedTeam = [];
+  approvedTeamPhones = [];
+  currentLeaderPhone = null;
+  currentRound = 0;
+  currentPhase = 'waiting';
+  requiredTeamSize = 0;
+  myRole = null;
+  hideGameActions();
+  const resultDiv = document.getElementById('resultDisplay');
+  if (resultDiv) {
+    resultDiv.classList.add('hidden');
+    resultDiv.classList.remove('parchment-card');
+  }
+  const roundLabel = document.getElementById('currentRound');
+  if (roundLabel) roundLabel.textContent = '';
+}
+
+function updateRoundLabel() {
+  const roundLabel = document.getElementById('currentRound');
+  if (!roundLabel || !currentRound) return;
+  roundLabel.textContent = `第 ${currentRound} 轮`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getMissionTeamSize(playerCount, round) {
+  const sizes = {
+    5: [2, 3, 2, 3, 3],
+    6: [2, 3, 4, 3, 4],
+    7: [2, 3, 3, 4, 4],
+    8: [3, 4, 4, 5, 5],
+    9: [3, 4, 4, 5, 5],
+    10: [3, 4, 4, 5, 5]
+  };
+  const rounds = sizes[playerCount] || sizes[5];
+  return rounds[Math.max(0, round - 1)] || rounds[0];
+}
+
+// 英雄头像生成 - 史诗卡牌风格
 function generateAvatar(name, phone) {
   const colors = ['#c9a227', '#8b4513', '#2e8b57', '#4169e1', '#8b008b', '#cd5c5c', '#20b2aa', '#ff8c00', '#4682b4', '#9932cc'];
   const hash = phone.split('').reduce((a,b) => ((a<<5)-a)+b.charCodeAt(0),0);
   const color = colors[Math.abs(hash) % colors.length];
   const initial = name ? name.charAt(0).toUpperCase() : '?';
   
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:'+color+'"/><stop offset="100%" style="stop-color:#1a1510"/></linearGradient></defs><rect width="80" height="80" rx="40" fill="url(#g)"/><circle cx="40" cy="30" r="15" fill="'+color+'" opacity="0.8"/><ellipse cx="40" cy="65" rx="25" ry="20" fill="'+color+'" opacity="0.8"/><text x="40" y="55" font-size="28" fill="#fff" text-anchor="middle" font-family="serif">'+initial+'</text></svg>';
+  // 创建一个带有金属边框和纹理感的方形头像
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+      <defs>
+        <linearGradient id="g_${phone}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${color};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#1a1612;stop-opacity:1" />
+        </linearGradient>
+        <filter id="f_${phone}" x="0" y="0">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+          <feOffset dx="1" dy="1" />
+          <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <rect width="80" height="80" fill="#0f0c09" />
+      <rect x="4" y="4" width="72" height="72" fill="url(#g_${phone})" rx="2" />
+      <rect x="4" y="4" width="72" height="72" fill="none" stroke="#63472b" stroke-width="3" rx="2" opacity="0.6" />
+      <text x="40" y="52" font-size="36" fill="#f9e076" text-anchor="middle" font-family="serif" font-weight="bold" filter="url(#f_${phone})">${initial}</text>
+      <path d="M4 4 L20 4 L4 20 Z" fill="#63472b" opacity="0.8" />
+      <path d="M76 76 L60 76 L76 60 Z" fill="#63472b" opacity="0.8" />
+    </svg>`;
   
   return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
 }
@@ -60,7 +146,8 @@ function register() {
       currentUser = { 
         phone: response.user.phone, 
         username: response.user.username,
-        avatar: generateAvatar(response.user.username, response.user.phone) 
+        avatar: generateAvatar(response.user.username, response.user.phone),
+        total_points: response.user.total_points || 0
       };
       saveLoginState(currentUser);
       
@@ -90,7 +177,16 @@ socket.on('reconnect', () => {
   toast("已重新连接", "success");
   if (currentRoom && currentUser) {
     socket.emit('joinRoom', { roomId: currentRoom, phone: currentUser.phone, username: currentUser.username }, (res) => {
-      if (res.success) toast("已回到房间", "success");
+      if (res.success) {
+        gamePlayers = res.players || gamePlayers;
+        selectedPlayerCount = res.requiredPlayers || selectedPlayerCount;
+        if (res.gameState) {
+          restoreGameState(res.gameState);
+        } else {
+          updateRoomUI();
+        }
+        toast("已回到房间", "success");
+      }
     });
   }
 });
@@ -138,7 +234,7 @@ function updateLobbyStats() {
   document.getElementById("welcomeUser").textContent = currentUser.username;
   socket.emit('getUser', { phone: currentUser.phone }, (user) => {
     if (user) {
-      document.getElementById("totalPoints").textContent = user.points || 0;
+      document.getElementById("totalPoints").textContent = user.total_points || 0;
       document.getElementById("gamesPlayed").textContent = user.games_played || 0;
       document.getElementById("gamesWon").textContent = user.games_won || 0;
     }
@@ -151,8 +247,11 @@ function createRoom() {
     hideLoading();
     if (response.success) {
       currentRoom = response.roomId;
+      selectedPlayerCount = response.requiredPlayers || selectedPlayerCount;
+      gamePlayers = response.players || [];
       showScreen('room');
       document.getElementById("inviteCode").textContent = currentRoom;
+      updateRoomUI();
       toast("房间创建成功", "success");
     } else {
       alert(response.message || "创建失败");
@@ -171,8 +270,14 @@ function joinRoom() {
     hideLoading();
     if (response.success) {
       currentRoom = code;
+      selectedPlayerCount = response.requiredPlayers || selectedPlayerCount;
+      gamePlayers = response.players || [];
       showScreen('room');
       document.getElementById("inviteCode").textContent = currentRoom;
+      updateRoomUI();
+      if (response.gameState) {
+        restoreGameState(response.gameState);
+      }
       toast("加入成功", "success");
     } else {
       alert(response.message || "加入失败");
@@ -194,8 +299,12 @@ function selectPlayerCount(count) {
 function updateStartButton() {
   const btn = document.getElementById("startBtn");
   if (!btn) return;
+  const me = gamePlayers.find(player => player.phone === currentUser?.phone);
   const needed = selectedPlayerCount - (gamePlayers.length || 0);
-  if (needed > 0) {
+  if (!me || !me.isLeader) {
+    btn.textContent = "等待房主开始";
+    btn.disabled = true;
+  } else if (needed > 0) {
     btn.textContent = "等待 " + needed + " 人";
     btn.disabled = true;
   } else {
@@ -211,10 +320,15 @@ function startGame() {
 }
 
 function leaveRoom() {
-  socket.emit('leaveRoom', { roomId: currentRoom, phone: currentUser.phone }, () => {
+  socket.emit('leaveRoom', { roomId: currentRoom, phone: currentUser.phone }, (response) => {
+    if (response && response.success === false) {
+      toast(response.message || "无法离开房间", "error");
+      return;
+    }
     currentRoom = null;
-  document.getElementById("identityBtn").classList.add("hidden");
+    setIdentityButtonsVisible(false);
     gamePlayers = [];
+    resetGameViewState();
     showScreen('lobby');
   });
 }
@@ -256,19 +370,74 @@ socket.on('playerLeft', (data) => {
 });
 
 socket.on('gameStarted', (data) => {
-  gamePlayers = data.players;
-  myRole = data.myRole;
-  document.getElementById("myRole").textContent = myRole;
-  
-  // 显示角色信息
+  restoreGameState(data);
   showRoleStart(data);
-  document.getElementById("identityBtn").classList.remove("hidden");
-  
-  updatePhase("🎮 游戏开始", "你的角色: " + myRole);
-  toast("游戏开始！你的角色: " + myRole, "success");
-  updatePlayersGrid();
-  if (data.players[0].phone === currentUser.phone) showLeaderActions();
+  toast("游戏开始！你的角色: " + data.myRole, "success");
 });
+
+function restoreGameState(data) {
+  hideGameActions();
+  gamePlayers = data.players || [];
+  myRole = data.myRole || myRole;
+  currentLeaderPhone = data.leaderPhone || null;
+  approvedTeamPhones = data.approvedTeamPhones || [];
+  currentRound = data.round || currentRound || 1;
+  currentPhase = data.phase || currentPhase;
+  requiredTeamSize = getMissionTeamSize(gamePlayers.length, currentRound);
+  selectedTeam = [];
+
+  showScreen('game');
+  document.getElementById("myRole").textContent = myRole || '';
+  setIdentityButtonsVisible(Boolean(myRole));
+  updateRoundLabel();
+  updatePlayersGrid();
+  updateGameProgress(currentRound, data.missionHistory || []);
+  updatePhase(getPhaseTitle(data.phase), getPhaseDescription(data));
+
+  if (data.phase === 'team_building' && data.leaderPhone === currentUser.phone) {
+    showLeaderActions();
+  } else if (data.phase === 'voting') {
+    showVoteActions();
+  } else if (data.phase === 'mission') {
+    showMissionActions();
+  } else if (data.phase === 'assassination') {
+    renderAssassinationPanel(data.assassinationTargets || []);
+  }
+}
+
+function getPhaseTitle(phase) {
+  const titles = {
+    team_building: "⚔️ 组队阶段",
+    voting: "🗳️ 投票阶段",
+    mission: "⚔️ 任务阶段",
+    assassination: "🗡️ 刺杀阶段"
+  };
+  return titles[phase] || "🎮 游戏进行中";
+}
+
+function getPhaseDescription(data) {
+  if (data.phase === 'team_building') {
+    return data.leaderPhone === currentUser.phone
+      ? `轮到你组队，本轮需要选择 ${requiredTeamSize} 人`
+      : `等待队长组队，本轮需要 ${requiredTeamSize} 人`;
+  }
+  if (data.phase === 'voting') {
+    return "全员投票中，请确认队伍是否可信";
+  }
+  if (data.phase === 'mission') {
+    return approvedTeamPhones.includes(currentUser.phone)
+      ? "你在任务队伍中，请私下提交结果"
+      : "任务执行中，等待队员匿名提交";
+  }
+  if (data.phase === 'assassination') {
+    return myRole === 'assassin' ? "请选择你认为是梅林的玩家" : "等待刺客做出最终选择";
+  }
+  return "你的角色: " + (data.myRole || myRole || '');
+}
+
+function showRoleStart(data) {
+  showRoleInfo(data.myRole, data.mySees || []);
+}
 
 // 显示角色信息和可见玩家
 function showRoleInfo(role, sees) {
@@ -282,45 +451,57 @@ function showRoleInfo(role, sees) {
   };
   
   const roleDesc = {
-    'merlin': '你知道所有坏人的身份（除莫德雷德）',
-    'percival': '你知道梅林是谁',
-    'loyalist': '努力找出坏人',
-    'assassin': '你可以刺杀梅林',
-    'minion': '你知道梅林和其他坏人',
-    'oberon': '你是坏人但互相不知道身份'
+    'merlin': '预言者：你能识别已知坏人，请谨慎引导队伍。',
+    'percival': '守护者：你会看到梅林候选人，请保护真正的梅林。',
+    'loyalist': '亚瑟忠臣：努力找出坏人，确保任务成功。',
+    'assassin': '刺客：你可以最后指认梅林，反败为胜。',
+    'minion': '爪牙：你知道其他已知坏人，负责误导好人。',
+    'oberon': '局外人：你是坏人，但并不认识队友。'
   };
   
-  // 创建角色信息面板
-  let info = `你的角色: ${roleNames[role] || role}\n`;
-  info += `${roleDesc[role] || ''}\n`;
+  const avatarUrl = ROLE_AVATARS[role] || '';
   
-  // 显示能看到的信息
+  // 创建沉浸式信息面板
+  let info = `
+    <div class="role-reveal" style="text-align:center; padding:10px 0;">
+      ${avatarUrl ? `<img src="${avatarUrl}" style="width:140px;height:140px;border:3px solid var(--gold);margin-bottom:15px;box-shadow:0 0 20px rgba(201,162,39,0.5);border-radius:4px;">` : ''}
+      <p style="font-size:1.1rem; color:var(--text-main);"><strong>${roleDesc[role] || ''}</strong></p>
+    </div>
+  `;
+  
   if (sees && sees.length > 0) {
-    info += '\n你看到: ';
+    info += '<div class="ally-list" style="margin-top:10px;"><h4>你的视野:</h4>';
     if (role === 'percival') {
-      info += sees.map(s => s.username + '(?)').join(', ');
+      info += '<p>' + sees.map(s => `<span>${escapeHtml(s.username)}</span>(?)`).join(', ') + '</p>';
     } else {
-      info += sees.map(s => s.username + '(' + (s.type === 'evil' ? '坏人' : '好人') + ')').join(', ');
+      info += '<p>' + sees.map(s => `<span style="color:${s.type === 'evil' ? '#ff6b6b' : '#90EE90'}">${escapeHtml(s.username)}</span>`).join(', ') + '</p>';
     }
+    info += '</div>';
   } else if (role === 'loyalist' || role === 'oberon') {
-    info += '\n你没有特殊视角，努力分析吧！';
+    info += '<p style="margin-top:10px;"><i>你没有特殊视角，通过言谈进行推理吧。</i></p>';
   }
   
   // 在结果面板显示角色信息
   const resultDiv = document.getElementById('resultDisplay');
   resultDiv.classList.remove('hidden');
-  document.getElementById('resultTitle').textContent = roleNames[role] || role;
-  document.getElementById('resultMessage').textContent = info;
+  resultDiv.classList.add('parchment-card'); // 切换到羊皮纸模式
   
-  // 5秒后隐藏
+  document.getElementById('resultTitle').textContent = roleNames[role] || role;
+  document.getElementById('resultMessage').innerHTML = info;
+  
+  // 亮相时间延长至 8 秒
   setTimeout(() => {
     resultDiv.classList.add('hidden');
-  }, 5000);
+    resultDiv.classList.remove('parchment-card');
+  }, 8000);
 }
 
 socket.on('teamProposed', (data) => {
+  currentPhase = 'voting';
+  requiredTeamSize = data.requiredTeamSize || requiredTeamSize;
   updatePhase("🗳️ 投票阶段", "队长已提交队伍");
-  const teamNames = data.team.map(i => gamePlayers[i]?.username).join(', ');
+  approvedTeamPhones = [];
+  const teamNames = (data.teamIndices || []).map(i => gamePlayers[i]?.username).join(', ');
   toast("队伍: " + teamNames, "info");
   showVoteActions();
 });
@@ -345,10 +526,13 @@ socket.on('voteResult', (data) => {
   // 3秒后自动隐藏
   setTimeout(() => {
     if (data.isApproved) {
+      currentPhase = 'mission';
       updatePhase("⚔️ 任务阶段", "执行任务...");
+      approvedTeamPhones = data.approvedTeamPhones || [];
       showMissionActions();
       resultDiv.classList.add('hidden');
     } else {
+      currentPhase = 'team_building';
       updatePhase("🔄 重新组队", "队伍被否决，等待下一轮");
     }
   }, 3000);
@@ -357,31 +541,34 @@ socket.on('voteResult', (data) => {
 socket.on('missionResult', (data) => {
   const result = data.success ? "✅ 成功" : "❌ 失败";
   
+  currentRound = data.round || currentRound;
+  updateRoundLabel();
   // 显示结果面板
   const resultDiv = document.getElementById('resultDisplay');
   resultDiv.classList.remove('hidden');
   document.getElementById('resultTitle').textContent = "任务" + result;
   
   // 显示任务详情
-  let missionDetails = [];
-  for (let [phone, r] of Object.entries(data.results)) {
-    const player = gamePlayers.find(p => p.phone === phone);
-    const name = player ? player.username : "未知";
-    missionDetails.push(name + ": " + (r === "success" ? "✓成功" : "✗失败"));
-  }
-  document.getElementById('resultMessage').textContent = missionDetails.join('\n') + "\n\n失败票: " + (data.fails||0);
+  document.getElementById('resultMessage').textContent =
+    `本次任务共有 ${data.teamSize || approvedTeamPhones.length || 0} 名队员参与。\n` +
+    `失败票: ${data.fails || 0}\n\n` +
+    `任务结果匿名结算，不公开每位队员的选择。`;
   
   setTimeout(() => {
     resultDiv.classList.add('hidden');
     // 如果是下一轮，队长可以开始组队
   }, 3000);
   
-  updateGameProgress(data.round);
+  updateGameProgress(data.round, data.missionHistory || []);
   updateLobbyStats();
 });
 
 socket.on('assassinationPhase', (data) => {
+  currentPhase = 'assassination';
+  hideGameActions();
   updatePhase("🗡️ 刺杀阶段", "刺客选择梅林");
+  currentLeaderPhone = null;
+  renderAssassinationPanel(data.targets || []);
   toast("好人已完成3轮任务，刺客选择梅林！", "error");
 });
 
@@ -415,9 +602,9 @@ socket.on('gameEnded', (data) => {
   backBtn.onclick = function() {
     showScreen('lobby');
     currentRoom = null;
-  document.getElementById("identityBtn").classList.add("hidden");
-    myRole = null;
+    setIdentityButtonsVisible(false);
     gamePlayers = [];
+    resetGameViewState();
     updateLobbyStats();
   };
   resultDiv.querySelector('#resultMessage').appendChild(document.createElement('br'));
@@ -427,9 +614,17 @@ socket.on('gameEnded', (data) => {
 });
 
 socket.on('nextRound', (data) => {
-  updateGameProgress(data.round);
-  updatePhase("第 " + data.round + " 轮", "队长: " + data.leader);
-  if (data.leader === currentUser.phone) showLeaderActions();
+  currentRound = data.round || currentRound + 1;
+  currentPhase = 'team_building';
+  requiredTeamSize = getMissionTeamSize(gamePlayers.length, currentRound);
+  currentLeaderPhone = data.leaderPhone || null;
+  approvedTeamPhones = [];
+  selectedTeam = [];
+  hideGameActions();
+  updateRoundLabel();
+  updateGameProgress(currentRound);
+  updatePhase("第 " + data.round + " 轮", "队长: " + (data.leaderUsername || ''));
+  if (data.leaderPhone === currentUser.phone) showLeaderActions();
 });
 
 // UI更新
@@ -439,55 +634,104 @@ function updateRoomUI() {
   gamePlayers.forEach(p => {
     const li = document.createElement("li");
     li.className = "player-waiting-card";
-    li.innerHTML = '<div class="player-avatar">'+(p.avatar || '👤')+'</div><div class="player-info"><div class="player-name">'+p.username+'</div><div class="player-status '+(p.isLeader?'host':'')+'">'+(p.isLeader?'👑 房主':'玩家')+'</div></div>';
+    li.innerHTML = '<div class="player-avatar">'+(p.avatar || '👤')+'</div><div class="player-info"><div class="player-name">'+escapeHtml(p.username)+'</div><div class="player-status '+(p.isLeader?'host':'')+'">'+(p.isLeader?'👑 房主':'玩家')+'</div></div>';
     list.appendChild(li);
   });
   document.getElementById("playerCount").textContent = gamePlayers.length;
   updateStartButton();
 }
 
+// 角色头像映射
+const ROLE_AVATARS = {
+  'merlin': '/avatars/merlin.png',
+  'percival': '/avatars/percival.png',
+  'loyalist': '/avatars/loyal_servant.png',
+  'assassin': '/avatars/assassin.png',
+  'minion': '/avatars/morgana.png',
+  'oberon': '/avatars/oberon.png',
+  'mordred': '/avatars/mordred.png'
+};
+
 function updatePlayersGrid() {
   const grid = document.getElementById("playersGrid");
+  if (!grid) return;
   grid.innerHTML = '';
+  
   gamePlayers.forEach((p, i) => {
     const card = document.createElement("div");
+    const isMe = p.phone === currentUser.phone;
+    const isLeader = p.phone === currentLeaderPhone;
+    const inTeam = selectedTeam.includes(i) || (approvedTeamPhones && approvedTeamPhones.includes(p.phone));
+    
     card.className = "player-card";
+    if (isLeader) card.classList.add('is-leader');
+    if (inTeam) card.classList.add('in-team');
+    if (approvedTeamPhones && approvedTeamPhones.includes(p.phone)) card.classList.add('on-mission');
+    
     card.id = "player-" + i;
-    card.innerHTML = '<div class="player-card-avatar">'+(p.avatar || '👤')+'</div><div class="name">'+p.username+'</div><div class="status"></div>';
+    
+    // 如果是我自己且已有角色，显示立绘头像
+    let avatarHtml = p.avatar || '👤';
+    if (isMe && myRole && ROLE_AVATARS[myRole]) {
+      avatarHtml = `<img src="${ROLE_AVATARS[myRole]}" style="width:100%;height:100%;object-fit:cover;border-radius:2px;">`;
+    }
+
+    card.innerHTML = `
+      <div class="player-card-avatar">${avatarHtml}</div>
+      <div class="name">${escapeHtml(p.username)} ${isMe ? '(你)' : ''}</div>
+      <div class="status">${isLeader ? '队长' : ''}</div>
+    `;
+    
+    // 如果是组队阶段且我是队长，允许点击
+    if (currentLeaderPhone === currentUser.phone) {
+      card.onclick = () => toggleTeamMember(card, i);
+    }
+    
     grid.appendChild(card);
   });
 }
 
-function updateGameProgress(round) {
+function updateGameProgress(round, missionHistory = []) {
   const progress = document.getElementById("gameProgress");
+  if (!progress) return;
   progress.innerHTML = '';
+  
   for (let i = 1; i <= 5; i++) {
     const step = document.createElement("div");
     step.className = "progress-step";
-    if (i < round) {
-      step.textContent = "✓";
+    
+    const result = missionHistory[i - 1]; // true = success, false = fail, undefined = not yet played
+    
+    if (result === true) {
+      step.textContent = "⚔️";
       step.classList.add("success");
+      step.title = "任务成功";
+    } else if (result === false) {
+      step.textContent = "💀";
+      step.classList.add("fail");
+      step.title = "任务失败";
     } else if (i === round) {
       step.textContent = i;
       step.classList.add("current");
+      step.title = "当前轮次";
     } else {
       step.textContent = i;
+      step.style.opacity = "0.5";
     }
     progress.appendChild(step);
   }
 }
 
 function showLeaderActions() {
+  selectedTeam = [];
   document.getElementById("leaderActions").classList.remove("hidden");
   document.getElementById("voteActions").classList.add("hidden");
   document.getElementById("missionActions").classList.add("hidden");
-  updatePhase("⚔️ 组队阶段", "选择任务成员");
+  updateLeaderSelectionHint();
+  updatePhase("⚔️ 组队阶段", `选择 ${requiredTeamSize} 名任务成员`);
   document.querySelectorAll('.player-card').forEach((card, i) => {
     card.onclick = () => {
-      card.classList.toggle("selected");
-      const idx = selectedTeam.indexOf(i);
-      if (idx > -1) selectedTeam.splice(idx, 1);
-      else selectedTeam.push(i);
+      toggleTeamMember(card, i);
     };
   });
 }
@@ -501,27 +745,67 @@ function showVoteActions() {
 function showMissionActions() {
   document.getElementById("leaderActions").classList.add("hidden");
   document.getElementById("voteActions").classList.add("hidden");
+  if (!approvedTeamPhones.includes(currentUser.phone)) {
+    document.getElementById("missionActions").classList.add("hidden");
+    return;
+  }
   document.getElementById("missionActions").classList.remove("hidden");
+  const desc = document.querySelector('#missionActions p');
+  if (desc) {
+    desc.textContent = ['assassin', 'minion', 'oberon'].includes(myRole)
+      ? '请选择任务结果。请勿让其他人看到你的操作。'
+      : '你是好人，只能提交成功。请私下点击提交。';
+  }
+  const failButton = document.querySelector('#missionActions .reject');
+  if (failButton) {
+    const canFail = ['assassin', 'minion', 'oberon'].includes(myRole);
+    failButton.style.display = canFail ? '' : 'none';
+  }
 }
 
 function submitTeam() {
-  socket.emit('submitTeam', { roomId: currentRoom, teamIndices: selectedTeam, leaderPhone: currentUser.phone }, (response) => {
-    if (!response.success) toast(response.message, "error");
+  if (selectedTeam.length !== requiredTeamSize) {
+    toast(`本轮需要选择 ${requiredTeamSize} 名队员`, "warning");
+    return;
+  }
+  socket.emit('submitTeam', { roomId: currentRoom, teamIndices: selectedTeam }, (response) => {
+    if (!response.success) {
+      toast(response.message, "error");
+      return;
+    }
+    toast("队伍已提交，等待全员投票", "success");
     selectedTeam = [];
+    updateLeaderSelectionHint();
   });
 }
 
-function vote(choice) {
-  socket.emit('vote', { roomId: currentRoom, phone: currentUser.phone, choice: choice }, () => {
+function vote(choice, button) {
+  socket.emit('vote', { roomId: currentRoom, choice: choice }, (response) => {
+    if (!response.success) {
+      if (button) {
+        button.classList.remove('loading');
+        button.disabled = false;
+      }
+      toast(response.message || "投票失败", "error");
+      return;
+    }
     document.getElementById("voteActions").classList.add("hidden");
     toast("已投票", "success");
   });
 }
 
-function submitMission(result) {
-  socket.emit('submitMission', { roomId: currentRoom, phone: currentUser.phone, result: result }, () => {
+function submitMission(result, button) {
+  socket.emit('submitMission', { roomId: currentRoom, result: result }, (response) => {
+    if (!response.success) {
+      if (button) {
+        button.classList.remove('loading');
+        button.disabled = false;
+      }
+      toast(response.message || "提交失败", "error");
+      return;
+    }
     document.getElementById("missionActions").classList.add("hidden");
-    toast("任务已提交", "success");
+    toast("任务已匿名提交", "success");
   });
 }
 
@@ -533,7 +817,7 @@ function showRanking() {
     list.slice(0, 20).forEach((u, i) => {
       const tr = document.createElement("tr");
       const rate = u.games_played > 0 ? Math.round(u.games_won / u.games_played * 100) : 0;
-      tr.innerHTML = '<td>'+(i+1)+'</td><td>'+u.username+'</td><td>'+u.points+'</td><td>'+rate+'%</td>';
+      tr.innerHTML = '<td>'+(i+1)+'</td><td>'+u.username+'</td><td>'+u.total_points+'</td><td>'+rate+'%</td>';
       tbody.appendChild(tr);
     });
     document.getElementById("rankingModal").classList.remove("hidden");
@@ -550,7 +834,7 @@ function showProfile() {
   document.getElementById("avatarPreview").src = currentUser.avatar || "";
   socket.emit('getUser', { phone: currentUser.phone }, (user) => {
     if (user) {
-      document.getElementById("statPoints").textContent = user.points || 0;
+      document.getElementById("statPoints").textContent = user.total_points || 0;
       document.getElementById("statPlayed").textContent = user.games_played || 0;
       document.getElementById("statWon").textContent = user.games_won || 0;
       const rate = user.games_played > 0 ? Math.round(user.games_won / user.games_played * 100) : 0;
@@ -619,15 +903,15 @@ function showIdentityActions() {
   const roleActions = {
     'merlin': '你可以看到所有坏人，努力引导好人获胜！',
     'percival': '你看到的是梅林(?) - 小心，坏人可能假扮梅林！',
-    'assassin': '任务失败后可以刺杀梅林获胜',
-    'minion': '你知道梅林和其他坏人，努力破坏！'
+    'assassin': '当好人完成3次任务后，你可以刺杀梅林翻盘。',
+    'minion': '你知道其他已知坏人，努力误导好人并破坏任务。'
   };
   
   let info = `角色: ${myRole}\n`;
   info += roleActions[myRole] || '';
   
   if (myRole === 'assassin') {
-    info += '\n\n点击其他玩家可以指认ta的身份';
+    info += '\n\n当进入刺杀阶段时，你会看到可选目标列表。';
   }
   
   // 创建身份操作面板
@@ -642,7 +926,7 @@ function showIdentityActions() {
         <p>${info}</p>
       </div>
       <div id="allyList" class="ally-list"></div>
-      ${myRole === 'assassin' ? '<p style="color:var(--text-dim);font-size:12px;">* 点击其他玩家可以指认</p>' : ''}
+      <p style="color:var(--text-dim);font-size:12px;">请只在自己设备上查看，不要向其他玩家展示此面板。</p>
     </div>
   `;
   document.body.appendChild(modal);
@@ -661,7 +945,7 @@ function updateAllyList() {
   if (!list) return;
   
   // 请求服务器获取可见信息
-  socket.emit('checkAlly', { roomId: currentRoom, phone: currentUser.phone }, (r) => {
+  socket.emit('checkAlly', { roomId: currentRoom }, (r) => {
     if (!r.success || !r.sees || r.sees.length === 0) {
       list.innerHTML = '<p style="color:var(--text-dim)">你没有特殊视角</p>';
       return;
@@ -671,7 +955,7 @@ function updateAllyList() {
     r.sees.forEach(s => {
       const typeLabel = s.type === 'evil' ? '坏人' : (s.type === 'good' ? '好人' : '?');
       const color = s.type === 'evil' ? '#ff6b6b' : '#90EE90';
-      html += `<p style="color:${color}">${s.username} - ${typeLabel}</p>`;
+      html += `<p style="color:${color}">${escapeHtml(s.username)} - ${typeLabel}</p>`;
     });
     list.innerHTML = html;
   });
@@ -684,7 +968,7 @@ function accusePlayer(targetPhone) {
     return;
   }
   
-  socket.emit('accuse', { roomId: currentRoom, phone: currentUser.phone, targetPhone }, (r) => {
+  socket.emit('accuse', { roomId: currentRoom, targetPhone }, (r) => {
     if (r.success) {
       toast(r.result, r.isCorrect ? "success" : "error");
     } else {
@@ -716,41 +1000,58 @@ function showActionFeedback(elementId, type) {
 
 // 队伍选择反馈
 function toggleTeamMember(card, index) {
-  card.classList.toggle('selected');
-  
   const idx = selectedTeam.indexOf(index);
   if (idx > -1) {
+    card.classList.toggle('selected');
     selectedTeam.splice(idx, 1);
     card.classList.remove('in-team');
   } else {
+    if (selectedTeam.length >= requiredTeamSize) {
+      toast(`本轮只能选择 ${requiredTeamSize} 名队员`, "warning");
+      return;
+    }
+    card.classList.toggle('selected');
     selectedTeam.push(index);
     card.classList.add('in-team');
   }
+  updateLeaderSelectionHint();
 }
 
 // 投票反馈
-function voteWithFeedback(choice) {
-  const btn = event.target;
+function voteWithFeedback(choice, event) {
+  const btn = event?.currentTarget || event?.target;
+  if (!btn) {
+    vote(choice);
+    return;
+  }
   btn.classList.add('loading');
   btn.disabled = true;
   
-  vote(choice);
+  vote(choice, btn);
 }
 
 // 任务提交反馈
-function submitMissionWithFeedback(result) {
-  const btn = event.target;
+function submitMissionWithFeedback(result, event) {
+  const btn = event?.currentTarget || event?.target;
+  if (!btn) {
+    submitMission(result);
+    return;
+  }
   btn.classList.add('loading');
   btn.disabled = true;
   
-  submitMission(result);
+  submitMission(result, btn);
 }
 
 // 队伍提交反馈
-function submitTeamWithFeedback() {
-  const btn = event.target;
+function submitTeamWithFeedback(event) {
+  const btn = event?.currentTarget || event?.target;
   if (selectedTeam.length === 0) {
     toast("请至少选择1名队员", "warning");
+    return;
+  }
+  if (!btn) {
+    submitTeam();
     return;
   }
   btn.classList.add('loading');
@@ -792,8 +1093,68 @@ function updateTeamDisplay() {
   });
 }
 
+function updateLeaderSelectionHint() {
+  const description = document.querySelector('#leaderActions p');
+  const submitButton = document.querySelector('#leaderActions button');
+  if (description) {
+    description.textContent = `本轮需要 ${requiredTeamSize} 人。当前已选择 ${selectedTeam.length} 人。`;
+  }
+  if (submitButton) {
+    submitButton.disabled = selectedTeam.length !== requiredTeamSize;
+  }
+}
+
+function renderAssassinationPanel(targets) {
+  if (myRole !== 'assassin') {
+    return;
+  }
+
+  const resultDiv = document.getElementById('resultDisplay');
+  const title = document.getElementById('resultTitle');
+  const message = document.getElementById('resultMessage');
+  if (!resultDiv || !title || !message) return;
+
+  title.textContent = "🗡️ 刺杀阶段";
+  message.innerHTML = '<p>请选择你认为是梅林的玩家。该操作将直接结束游戏。</p>';
+
+  targets.forEach((target) => {
+    const button = document.createElement('button');
+    button.textContent = `刺杀 ${target.username}`;
+    button.style.margin = '8px 8px 0 0';
+    button.onclick = () => assassinate(target.phone, target.username, button);
+    message.appendChild(button);
+  });
+
+  resultDiv.classList.remove('hidden');
+}
+
+function assassinate(targetPhone, targetName, button) {
+  const buttons = document.querySelectorAll('#resultMessage button');
+  buttons.forEach((item) => {
+    item.disabled = true;
+  });
+  if (button) {
+    button.classList.add('loading');
+  }
+  socket.emit('assassinate', { roomId: currentRoom, targetPhone }, (response) => {
+    if (!response.success) {
+      buttons.forEach((item) => {
+        item.disabled = false;
+        item.classList.remove('loading');
+      });
+      toast(response.message || '刺杀失败', 'error');
+      return;
+    }
+    toast(`你选择了 ${targetName}，等待结算`, 'warning');
+  });
+}
+
 // 房主结束游戏
 function endGameByHost() {
+  if (!currentRoom) {
+    toast("当前不在房间中", "warning");
+    return;
+  }
   if (!confirm("确定要解散游戏吗？所有玩家将被移出房间。")) {
     return;
   }
@@ -802,8 +1163,8 @@ function endGameByHost() {
       toast("游戏已解散", "success");
       showScreen('lobby');
       currentRoom = null;
-      myRole = null;
       gamePlayers = [];
+      resetGameViewState();
       updateLobbyStats();
     } else {
       toast(r.message, "error");
@@ -816,12 +1177,17 @@ socket.on('gameDismissed', (data) => {
   toast("游戏已解散: " + data.reason, "warning");
   showScreen('lobby');
   currentRoom = null;
-  myRole = null;
   gamePlayers = [];
+  resetGameViewState();
+  setIdentityButtonsVisible(false);
 });
 
 // 测试模式 - 快速开始游戏
 function startTestGame() {
+  if (!currentRoom) {
+    toast("请先进入房间，再开启测试模式", "warning");
+    return;
+  }
   if (!confirm("测试模式：将以电脑AI模拟4名玩家，立即开始游戏。是否继续？")) {
     return;
   }

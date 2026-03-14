@@ -17,16 +17,11 @@
         <input type="tel" id="phone" placeholder="手机号" maxlength="11">
         <input type="text" id="username" placeholder="昵称（可选）">
         <button onclick="register()">进入游戏</button>
-        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
-        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
-      </div>
-        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
       </div>
       <div class="link-buttons">
-          <a href="#" onclick="showRanking(); return false;"><i class="gi gi-trophy"></i> 排行榜</a>
-          <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 游戏规则</a>
-          <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
-        </div>
+        <a href="#" onclick="showRanking(); return false;"><i class="gi gi-trophy"></i> 排行榜</a>
+        <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 游戏规则</a>
+        <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
       </div>
     </div>
 
@@ -39,7 +34,7 @@
         <div class="join-room">
           <h3>或加入房间</h3>
           <input type="text" id="joinCode" placeholder="邀请码" maxlength="6">
-          <button onclick="joinRoom()">加入</button>
+          <button onclick="joinRoom()">加入房间</button>
         </div>
         <div class="my-stats">
           <h3>📊 我的战绩</h3>
@@ -47,15 +42,10 @@
           <p>游戏局数: <span id="gamesPlayed">0</span></p>
           <p>获胜次数: <span id="gamesWon">0</span></p>
         </div>
-        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
-        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
-      </div>
-        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
       </div>
       <div class="link-buttons">
-          <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 游戏规则</a>
-          <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
-        </div>
+        <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 游戏规则</a>
+        <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
       </div>
     </div>
 
@@ -81,30 +71,27 @@
     <div id="roomScreen" class="screen hidden">
       <div class="card">
         <h2><i class="gi gi-castle"></i> 房间 <span id="roomCode"></span></h2>
-        
-        </div>
-        
         <div id="waitingHint" class="waiting-hint">选择人数后开始</div>
-        
         <div class="players-list">
           <h3>👥 玩家 (<span id="playerCount">0</span>/<span id="maxPlayers">5</span>)</h3>
           <ul id="players"></ul>
         </div>
-
-        <div class="actions">
+        <div class="invite-code"><span id="inviteCode"></span></div>
+        <div class="actions room-actions">
           <button id="startBtn" onclick="startGame()"><i class="gi gi-sword"></i> 开始战役</button>
+          <button class="secondary" onclick="copyInviteCode()">复制邀请码</button>
           <button class="secondary" onclick="leaveRoom()">离开房间</button>
         </div>
-
-        <div class="invite-code"><span id="inviteCode"></span></div>
-        <button class="small" onclick="copyInviteCode()">复制邀请码</button>
       </div>
     </div>
 
     <!-- 游戏 -->
     <div id="gameScreen" class="screen hidden">
       <div class="card">
-        <h2><i class="gi gi-sword"></i> 战役进行中</h2>
+        <div class="game-topbar">
+          <h2><i class="gi gi-sword"></i> 战役进行中</h2>
+          <button class="secondary identity-btn hidden" onclick="showIdentityActions()">🆔 身份信息</button>
+        </div>
         <div class="game-progress" id="gameProgress"></div>
         <div class="turn-indicator" id="turnIndicator" style="display:none"><span class="phase-name"></span><span class="phase-desc"></span></div>
         <div class="game-info">
@@ -116,15 +103,15 @@
         <div id="leaderActions" class="actions hidden">
           <h3><i class="gi gi-sword"></i> 组队</h3>
           <p>选择任务成员：</p>
-          <button onclick="submitTeamWithFeedback()">提交队伍</button>
+          <button onclick="submitTeamWithFeedback(event)">提交队伍</button>
         </div>
 
         <div id="voteActions" class="actions hidden">
           <h3><i class="gi gi-ballot"></i> 投票</h3>
           <p>是否同意该队伍？</p>
           <div class="vote-buttons">
-            <button class="approve" onclick="vote('approve')">✓ 同意</button>
-            <button class="reject" onclick="vote('reject')">✗ 反对</button>
+            <button class="approve" onclick="voteWithFeedback('approve', event)">✓ 同意</button>
+            <button class="reject" onclick="voteWithFeedback('reject', event)">✗ 反对</button>
           </div>
         </div>
 
@@ -132,24 +119,20 @@
           <h3><i class="gi gi-sword"></i> 任务</h3>
           <p>选择任务结果：</p>
           <div class="vote-buttons">
-            <button class="approve" onclick="submitMission('success')">✓ 成功</button>
-            <button class="reject" onclick="submitMission('fail')">✗ 失败</button>
+            <button class="approve" onclick="submitMissionWithFeedback('success', event)">✓ 成功</button>
+            <button class="reject" onclick="submitMissionWithFeedback('fail', event)">✗ 失败</button>
           </div>
         </div>
 
         <div id="resultDisplay" class="result hidden">
           <h3 id="resultTitle"></h3>
-          <p id="resultMessage"></p>
+          <div id="resultMessage" class="result-message"></div>
         </div>
-        
-        <button class="secondary" onclick="startTestGame()">🧪 开始测试模式</button>
-        <button class="reject" onclick="endGameByHost()">⚠️ 房主解散游戏</button>
-      </div>
-        <button id="identityBtn" class="secondary hidden" onclick="showIdentityActions()">🆔 身份信息</button>
-      </div>
-      <div class="link-buttons">
+
+        <div class="link-buttons game-links">
           <a href="#" onclick="showRules(); return false;"><i class="gi gi-scroll"></i> 查看规则</a>
           <a href="#" onclick="showProfile(); return false;"><i class="gi gi-helmet"></i> 个人中心</a>
+          <a href="#" onclick="endGameByHost(); return false;">⚠️ 解散游戏</a>
         </div>
       </div>
     </div>
@@ -167,82 +150,81 @@
     </div>
 
     <!-- 规则 -->
-    <div id="rulesModal" class="modal hidden">
-      <div class="modal-content">
-        <span class="close" onclick="closeRules()">×</span>
-        <h2><i class="gi gi-scroll"></i> 游戏规则</h2>
+    <div id="rulesModal" class="modal hidden" onclick="if(event.target === this) closeRules()">
+      <div class="modal-content parchment-card">
+        <button type="button" class="close modal-close" onclick="closeRules()" aria-label="关闭规则">×</button>
+        <h2>📜 战役规则</h2>
         
         <div class="rules-section">
-        <div class="rules-section">
-          <h3>⚔️ 任务配置</h3>
-          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
-          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
-          <p><em>* 第4轮需要2张失败票才能失败</em></p>
-        </div>
-          <h3>🎯 游戏目标</h3>
-          <p><strong>好人：</strong>完成3轮任务，阻止刺杀梅林</p>
-          <p><strong>坏人：</strong>3轮失败，或刺杀梅林</p>
+          <h3>快速看懂</h3>
+          <p><strong>这是什么游戏：</strong>阿瓦隆是一个阵营推理游戏。大家会讨论、组队、投票、执行任务，但不是所有人都属于同一阵营。</p>
+          <p><strong>好人要做什么：</strong>让任务成功 3 次，并在最后保护梅林不被刺杀。</p>
+          <p><strong>坏人要做什么：</strong>让任务失败 3 次，或者在好人先拿到 3 次成功后，由刺客刺杀梅林翻盘。</p>
         </div>
         
         <div class="rules-section">
-        <div class="rules-section">
-          <h3>⚔️ 任务配置</h3>
-          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
-          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
-          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+          <h3>每局怎么开始</h3>
+          <p>1. 房主创建房间并选择人数。</p>
+          <p>2. 每位玩家进入房间后，点击开始游戏。</p>
+          <p>3. 系统会私下告诉你身份。请不要把自己的手机画面给别人看。</p>
+          <p>4. 游戏开始后，按轮次进行组队、投票和任务。</p>
         </div>
-          <h3><i class="gi gi-shield"></i><i class="gi gi-sword"></i> 角色</h3>
-          <p><strong><i class="gi gi-wizard"></i> 梅林</strong> - 知道所有坏人（除莫德雷德）</p>
-          <p><strong><i class="gi gi-shield"></i> 派西维尔</strong> - 知道梅林是谁</p>
-          <p><strong>👼 忠臣</strong> - 无特殊技能</p>
-          <p><strong><i class="gi gi-dagger"></i> 刺客</strong> - 可刺杀梅林</p>
-          <p><strong>👿 爪牙</strong> - 知道梅林和其他坏人</p>
-          <p><strong>👺 奥伯伦</strong> - 坏人但互相不知</p>
-        </div>
-        
+
         <div class="rules-section">
-        <div class="rules-section">
-          <h3>⚔️ 任务配置</h3>
-          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
-          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
-          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+          <h3>每轮流程</h3>
+          <p><strong>第 1 步，队长组队：</strong>当前队长按本轮要求选择任务成员。</p>
+          <p><strong>第 2 步，全员投票：</strong>所有玩家投票决定这支队伍是否出发。</p>
+          <p><strong>第 3 步，执行任务：</strong>只有被选中的队员能提交任务结果。</p>
+          <p><strong>第 4 步，公布结果：</strong>系统只公布任务成功或失败，以及失败票数量，不公布是谁投了失败。</p>
         </div>
-          <h3><i class="gi gi-sword"></i> 流程</h3>
-          <ol>
-            <li>队长组队（3-5人）</li>
-            <li>全员投票</li>
-            <li>任务执行</li>
-            <li>3次成功=好人胜</li>
-            <li>3次失败=坏人胜</li>
-            <li>5轮后刺客刺杀</li>
-          </ol>
-        </div>
-        
+
         <div class="rules-section">
-        <div class="rules-section">
-          <h3>⚔️ 任务配置</h3>
-          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
-          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
-          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+          <h3>投票和任务的关键点</h3>
+          <p><strong>投票阶段：</strong>所有人都能投，同意票过半，队伍才会出发。</p>
+          <p><strong>任务阶段：</strong>好人只能提交成功，坏人才可以提交失败。</p>
+          <p><strong>连续 5 次组队被否决：</strong>坏人直接获胜。</p>
+          <p><strong>7 人及以上第 4 轮：</strong>需要 2 张失败票，这轮任务才算失败。</p>
         </div>
-          <h3>📊 人数配置</h3>
-          <p><strong>5人：</strong>梅林、派西、忠臣×2、刺客</p>
-          <p><strong>6人：</strong>+爪牙</p>
-          <p><strong>7人：</strong>+忠臣</p>
-          <p><strong>8人：</strong>+奥伯伦</p>
-          <p><strong>9-10人：</strong>+更多忠臣/爪牙</p>
-          <p>6人: +爪牙 | 7人: +忠臣 | 8人: +奥伯伦</p>
+
+        <div class="rules-section">
+          <h3>⚔️ 每轮需要几人出任务</h3>
+          <table>
+            <thead>
+              <tr><th>轮次</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>5人</td><td>2</td><td>3</td><td>2</td><td>3</td><td>3</td></tr>
+              <tr><td>6人</td><td>2</td><td>3</td><td>4</td><td>3</td><td>4</td></tr>
+              <tr><td>7人</td><td>2</td><td>3</td><td>3</td><td>4</td><td>4</td></tr>
+              <tr><td>8-10人</td><td>3</td><td>4</td><td>4</td><td>5</td><td>5</td></tr>
+            </tbody>
+          </table>
+          <p><small>* 7人及以上局，第4轮需2张失败票方可判定失败。</small></p>
         </div>
         
         <div class="rules-section">
-        <div class="rules-section">
-          <h3>⚔️ 任务配置</h3>
-          <p><strong>5-6人：</strong>第1轮2人，第2轮3人，第3轮2人，第4轮3人，第5轮3人</p>
-          <p><strong>7人+：</strong>第1轮2人，第2轮3人，第3轮3人，第4轮4人，第5轮4人</p>
-          <p><em>* 第4轮需要2张失败票才能失败</em></p>
+          <h3>角色怎么看</h3>
+          <p><strong>梅林：</strong>知道已知坏人是谁，但不能暴露自己，否则会被刺客盯上。</p>
+          <p><strong>派西维尔：</strong>会看到梅林候选人，需要从发言里判断谁才是真梅林。</p>
+          <p><strong>忠臣：</strong>没有额外视野，靠讨论和投票判断谁可信。</p>
+          <p><strong>刺客：</strong>属于坏人。若好人先拿到 3 次成功，你可以在最后刺杀梅林。</p>
+          <p><strong>爪牙：</strong>属于坏人，知道其他已知坏人，可以配合带节奏和投失败票。</p>
+          <p><strong>奥伯伦：</strong>也属于坏人，但不认识队友，队友通常也不认识你。</p>
         </div>
-          <h3>🎮 积分</h3>
-          <p><i class="gi gi-trophy"></i> 获胜 +100 | 💪 参与 +20</p>
+
+        <div class="rules-section">
+          <h3>怎么赢</h3>
+          <p><strong>好人立即获胜：</strong>任务成功 3 次，且刺客没有刺中梅林。</p>
+          <p><strong>坏人立即获胜：</strong>任务失败 3 次，或连续 5 次组队失败。</p>
+          <p><strong>坏人翻盘获胜：</strong>好人先达成 3 次任务成功后，刺客成功刺中梅林。</p>
+        </div>
+
+        <div class="rules-section">
+          <h3>给第一次玩的建议</h3>
+          <p>1. 不要只看一轮结果，要结合谁提队、谁投票、谁发言来判断。</p>
+          <p>2. 任务失败不公开具体是谁出的失败票，所以组队比结果本身更重要。</p>
+          <p>3. 如果你是好人，不要轻易把“你知道的信息”说得太死，尤其是梅林。</p>
+          <p>4. 如果你是坏人，光投失败不一定最好，有时先装好人才更容易混进关键任务。</p>
         </div>
       </div>
     </div>
